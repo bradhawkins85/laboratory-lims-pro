@@ -49,13 +49,13 @@ pids
 .spark-workbench-id
 **/agent-eval-report*
 
-# Old Spark/Vite files (keep them ignored)
-src/
-index.html
-vite.config.ts
-tailwind.config.js
-components.json
-runtime.config.json
-spark.meta.json
-theme.json
-.spark-initial-sha
+# Old Spark/Vite files (root level only)
+/src/
+/index.html
+/vite.config.ts
+/tailwind.config.js
+/components.json
+/runtime.config.json
+/spark.meta.json
+/theme.json
+/.spark-initial-sha
