@@ -1,0 +1,128 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model with UUID primary key
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  password  String
+  name      String?
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  samples   Sample[]
+  tests     Test[]
+  reports   Report[]
+}
+
+// Role enum for RBAC
+enum Role {
+  ADMIN
+  MANAGER
+  TECHNICIAN
+  USER
+}
+
+// Sample model
+model Sample {
+  id          String   @id @default(uuid()) @db.Uuid
+  sampleId    String   @unique
+  type        String
+  status      SampleStatus @default(RECEIVED)
+  metadata    Json?    // JSONB for flexible metadata
+  snapshot    Json?    // JSONB for audit snapshots
+  receivedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  userId      String   @db.Uuid
+  user        User     @relation(fields: [userId], references: [id])
+  tests       Test[]
+  
+  @@index([userId])
+  @@index([status])
+}
+
+enum SampleStatus {
+  RECEIVED
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+}
+
+// Test model
+model Test {
+  id          String   @id @default(uuid()) @db.Uuid
+  testName    String
+  result      String?
+  status      TestStatus @default(PENDING)
+  metadata    Json?    // JSONB for test parameters
+  snapshot    Json?    // JSONB for audit snapshots
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  completedAt DateTime?
+  
+  // Relations
+  sampleId    String   @db.Uuid
+  sample      Sample   @relation(fields: [sampleId], references: [id])
+  userId      String   @db.Uuid
+  user        User     @relation(fields: [userId], references: [id])
+  reports     Report[]
+  
+  @@index([sampleId])
+  @@index([userId])
+  @@index([status])
+}
+
+enum TestStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+// Report model
+model Report {
+  id          String   @id @default(uuid()) @db.Uuid
+  title       String
+  pdfUrl      String?
+  metadata    Json?    // JSONB for report metadata
+  snapshot    Json?    // JSONB for audit snapshots
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  testId      String   @db.Uuid
+  test        Test     @relation(fields: [testId], references: [id])
+  userId      String   @db.Uuid
+  user        User     @relation(fields: [userId], references: [id])
+  
+  @@index([testId])
+  @@index([userId])
+}
+
+// File attachment model
+model Attachment {
+  id          String   @id @default(uuid()) @db.Uuid
+  fileName    String
+  fileUrl     String
+  fileSize    Int
+  mimeType    String
+  metadata    Json?    // JSONB for file metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([fileName])
+}

@@ -7,11 +7,22 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+**/node_modules
+
+# Build outputs
 dist
 dist-ssr
 *-dist
-*.local
+build
+.next
+out
+
+# Environment variables
+.env
+.env.local
+.env.*.local
 
 # Editor directories and files
 .vscode/*
@@ -24,11 +35,27 @@ dist-ssr
 *.sln
 *.sw?
 
-.env
-**/agent-eval-report*
-packages
+# Testing
+coverage
+.nyc_output
+test-results
+playwright-report
+
+# Misc
+*.local
 pids
 .file-manifest
 .devcontainer/
-
 .spark-workbench-id
+**/agent-eval-report*
+
+# Old Spark/Vite files (keep them ignored)
+src/
+index.html
+vite.config.ts
+tailwind.config.js
+components.json
+runtime.config.json
+spark.meta.json
+theme.json
+.spark-initial-sha
