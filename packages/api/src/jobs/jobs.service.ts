@@ -221,4 +221,48 @@ export class JobsService {
 
     return job;
   }
+
+  /**
+   * Create a sample for a specific job
+   */
+  async createSampleForJob(jobId: string, dto: any, context: AuditContext) {
+    // Verify job exists
+    const job = await this.prisma.job.findUnique({ where: { id: jobId } });
+    if (!job) {
+      throw new NotFoundException(`Job with ID '${jobId}' not found`);
+    }
+
+    // Check if sampleCode already exists
+    const existing = await this.prisma.sample.findUnique({
+      where: { sampleCode: dto.sampleCode },
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        `Sample with sampleCode '${dto.sampleCode}' already exists`,
+      );
+    }
+
+    // Create the sample
+    const sample = await this.prisma.sample.create({
+      data: {
+        ...dto,
+        jobId,
+        clientId: job.clientId,
+        createdById: context.actorId,
+        updatedById: context.actorId,
+      },
+      include: {
+        job: true,
+        client: true,
+        createdBy: { select: { id: true, email: true, name: true } },
+        updatedBy: { select: { id: true, email: true, name: true } },
+      },
+    });
+
+    // Log audit entry
+    await this.auditService.logCreate(context, 'Sample', sample.id, sample);
+
+    return sample;
+  }
 }

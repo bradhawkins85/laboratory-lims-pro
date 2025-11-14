@@ -530,4 +530,123 @@ export class COAReportsService {
 </html>
     `.trim();
   }
+
+  /**
+   * Preview COA for a sample (returns rendered HTML + JSON snapshot)
+   */
+  async previewCOA(sampleId: string, context: AuditContext) {
+    const sample = await this.prisma.sample.findUnique({
+      where: { id: sampleId },
+      include: {
+        client: true,
+        job: true,
+        testAssignments: {
+          include: {
+            testDefinition: true,
+            section: true,
+            method: true,
+            specification: true,
+          },
+        },
+      },
+    });
+
+    if (!sample) {
+      throw new Error(`Sample with ID '${sampleId}' not found`);
+    }
+
+    const dataSnapshot = this.buildDataSnapshot(sample as any, 0, context);
+    const htmlSnapshot = this.buildHTMLSnapshot(dataSnapshot);
+    
+    const jsonSnapshot = {
+      sample: {
+        id: sample.id,
+        sampleCode: sample.sampleCode,
+        dateReceived: sample.dateReceived,
+        description: sample.sampleDescription,
+      },
+      client: {
+        id: sample.client.id,
+        name: sample.client.name,
+      },
+      tests: sample.testAssignments.map((ta) => ({
+        testName: ta.testDefinition?.name || 'N/A',
+        section: ta.section.name,
+        method: ta.method.name,
+        result: ta.result,
+        unit: ta.method.unit,
+        specification: ta.specification?.name,
+        status: ta.status,
+        oos: ta.oos,
+      })),
+    };
+
+    return {
+      htmlSnapshot,
+      jsonSnapshot,
+      sampleId: sample.id,
+      sampleCode: sample.sampleCode,
+    };
+  }
+
+  /**
+   * Export COA for a sample (creates/increments version; returns PDF URL)
+   */
+  async exportCOA(sampleId: string, context: AuditContext) {
+    const sample = await this.prisma.sample.findUnique({
+      where: { id: sampleId },
+      include: {
+        client: true,
+        job: true,
+        testAssignments: {
+          include: {
+            testDefinition: true,
+            section: true,
+            method: true,
+            specification: true,
+          },
+        },
+      },
+    });
+
+    if (!sample) {
+      throw new Error(`Sample with ID '${sampleId}' not found`);
+    }
+
+    // Get the latest version number for this sample
+    const latestReport = await this.prisma.cOAReport.findFirst({
+      where: { sampleId },
+      orderBy: { version: 'desc' },
+    });
+
+    const newVersion = (latestReport?.version || 0) + 1;
+
+    // Build the COA
+    const dataSnapshot = this.buildDataSnapshot(sample as any, newVersion, context);
+    const htmlSnapshot = this.buildHTMLSnapshot(dataSnapshot);
+
+    // Create the COA report
+    const report = await this.prisma.cOAReport.create({
+      data: {
+        sampleId,
+        version: newVersion,
+        status: 'DRAFT',
+        htmlSnapshot,
+        dataSnapshot: dataSnapshot as any,
+        createdById: context.actorId,
+        updatedById: context.actorId,
+        reportedById: context.actorId,
+      },
+    });
+
+    // Log audit entry
+    await this.auditService.logCreate(context, 'COAReport', report.id, report);
+
+    return {
+      id: report.id,
+      version: report.version,
+      pdfUrl: `/api/coa/${report.id}`,
+      message: `COA version ${newVersion} created successfully`,
+    };
+  }
 }

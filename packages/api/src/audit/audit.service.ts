@@ -156,6 +156,21 @@ export class AuditService {
   }
 
   /**
+   * Get a single audit log by ID
+   */
+  async getAuditLog(id: string) {
+    const log = await this.prisma.auditLog.findUnique({
+      where: { id },
+    });
+
+    if (!log) {
+      throw new Error(`Audit log with ID '${id}' not found`);
+    }
+
+    return log;
+  }
+
+  /**
    * Generate a transaction ID for grouping related changes
    */
   generateTxId(): string {

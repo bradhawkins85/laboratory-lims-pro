@@ -336,4 +336,157 @@ export class SamplesService {
 
     return oldSample;
   }
+
+  /**
+   * Add a test pack to a sample
+   */
+  async addTestPackToSample(
+    sampleId: string,
+    testPackId: string,
+    context: AuditContext,
+  ) {
+    // Verify sample exists
+    const sample = await this.prisma.sample.findUnique({
+      where: { id: sampleId },
+    });
+    if (!sample) {
+      throw new NotFoundException(`Sample with ID '${sampleId}' not found`);
+    }
+
+    // Verify test pack exists
+    const testPack = await this.prisma.testPack.findUnique({
+      where: { id: testPackId },
+      include: {
+        items: {
+          include: {
+            testDefinition: true,
+          },
+        },
+      },
+    });
+    if (!testPack) {
+      throw new NotFoundException(`TestPack with ID '${testPackId}' not found`);
+    }
+
+    // Create test assignments for each test definition in the pack
+    const testAssignments = await Promise.all(
+      testPack.items.map((item) =>
+        this.prisma.testAssignment.create({
+          data: {
+            sampleId,
+            testDefinitionId: item.testDefinitionId,
+            sectionId: item.testDefinition.sectionId,
+            methodId: item.testDefinition.methodId,
+            specificationId: item.testDefinition.specificationId,
+            createdById: context.actorId,
+            updatedById: context.actorId,
+          },
+          include: {
+            testDefinition: true,
+            section: true,
+            method: true,
+            specification: true,
+          },
+        }),
+      ),
+    );
+
+    // Log audit entry
+    await this.auditService.logCreate(
+      context,
+      'Sample',
+      sampleId,
+      { testPackId, testAssignmentsCreated: testAssignments.length },
+    );
+
+    return {
+      message: `Test pack added successfully with ${testAssignments.length} tests`,
+      testAssignments,
+    };
+  }
+
+  /**
+   * Add a single test to a sample
+   */
+  async addTestToSample(
+    sampleId: string,
+    testDefinitionId: string,
+    context: AuditContext,
+  ) {
+    // Verify sample exists
+    const sample = await this.prisma.sample.findUnique({
+      where: { id: sampleId },
+    });
+    if (!sample) {
+      throw new NotFoundException(`Sample with ID '${sampleId}' not found`);
+    }
+
+    // Verify test definition exists
+    const testDefinition = await this.prisma.testDefinition.findUnique({
+      where: { id: testDefinitionId },
+    });
+    if (!testDefinition) {
+      throw new NotFoundException(
+        `TestDefinition with ID '${testDefinitionId}' not found`,
+      );
+    }
+
+    // Create test assignment
+    const testAssignment = await this.prisma.testAssignment.create({
+      data: {
+        sampleId,
+        testDefinitionId,
+        sectionId: testDefinition.sectionId,
+        methodId: testDefinition.methodId,
+        specificationId: testDefinition.specificationId,
+        createdById: context.actorId,
+        updatedById: context.actorId,
+      },
+      include: {
+        testDefinition: true,
+        section: true,
+        method: true,
+        specification: true,
+      },
+    });
+
+    // Log audit entry
+    await this.auditService.logCreate(
+      context,
+      'TestAssignment',
+      testAssignment.id,
+      testAssignment,
+    );
+
+    return testAssignment;
+  }
+
+  /**
+   * Get attachments for a sample
+   */
+  async getSampleAttachments(sampleId: string) {
+    // Verify sample exists
+    const sample = await this.prisma.sample.findUnique({
+      where: { id: sampleId },
+    });
+    if (!sample) {
+      throw new NotFoundException(`Sample with ID '${sampleId}' not found`);
+    }
+
+    // Get attachments for the sample
+    const attachments = await this.prisma.attachment.findMany({
+      where: { sampleId },
+      include: {
+        createdBy: {
+          select: { id: true, email: true, name: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      data: attachments,
+      total: attachments.length,
+    };
+  }
 }

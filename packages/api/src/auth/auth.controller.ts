@@ -1,7 +1,21 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  HttpCode,
+  HttpStatus,
+  Req,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
+import type { Request } from 'express';
 
 class LoginDto {
   email: string;
@@ -44,5 +58,26 @@ export class AuthController {
       registerDto.password,
       registerDto.name,
     );
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Logout the current user' })
+  @ApiResponse({ status: 200, description: 'Successfully logged out' })
+  async logout() {
+    // JWT is stateless, so logout is handled client-side by removing the token
+    // This endpoint is provided for consistency and can be used for additional cleanup if needed
+    return { message: 'Successfully logged out' };
+  }
+
+  @Get('me')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current authenticated user information' })
+  @ApiResponse({ status: 200, description: 'User information retrieved' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getMe(@Req() req: Request) {
+    const user = (req as any).user;
+    return this.authService.getUserById(user.userId);
   }
 }

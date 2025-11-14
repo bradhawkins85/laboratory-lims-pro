@@ -9,12 +9,20 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
 import type { CreateJobDto, UpdateJobDto } from './jobs.service';
 import { Roles } from '../auth/roles.decorator';
 import { Role, JobStatus } from '@prisma/client';
 import type { Request } from 'express';
 
+@ApiTags('jobs')
+@ApiBearerAuth()
 @Controller('jobs')
 export class JobsController {
   constructor(private jobsService: JobsService) {}
@@ -88,5 +96,22 @@ export class JobsController {
       userAgent: req.headers['user-agent'],
     };
     return this.jobsService.deleteJob(id, context);
+  }
+
+  @Post(':id/samples')
+  @Roles(Role.ADMIN, Role.LAB_MANAGER, Role.ANALYST)
+  async createSampleForJob(
+    @Param('id') id: string,
+    @Body() dto: any,
+    @Req() req: Request,
+  ) {
+    const user = (req as any).user;
+    const context = {
+      actorId: user.userId,
+      actorEmail: user.email,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    };
+    return this.jobsService.createSampleForJob(id, dto, context);
   }
 }

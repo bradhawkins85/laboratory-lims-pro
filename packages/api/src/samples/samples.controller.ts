@@ -9,12 +9,20 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { SamplesService } from './samples.service';
 import type { CreateSampleDto, UpdateSampleDto } from './samples.service';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
 import type { Request } from 'express';
 
+@ApiTags('samples')
+@ApiBearerAuth()
 @Controller('samples')
 export class SamplesController {
   constructor(private samplesService: SamplesService) {}
@@ -105,5 +113,45 @@ export class SamplesController {
       userAgent: req.headers['user-agent'],
     };
     return this.samplesService.deleteSample(id, context);
+  }
+
+  @Post(':id/tests/add-pack')
+  @Roles(Role.ADMIN, Role.LAB_MANAGER, Role.ANALYST)
+  async addTestPackToSample(
+    @Param('id') id: string,
+    @Body() body: { testPackId: string },
+    @Req() req: Request,
+  ) {
+    const user = (req as any).user;
+    const context = {
+      actorId: user.userId,
+      actorEmail: user.email,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    };
+    return this.samplesService.addTestPackToSample(id, body.testPackId, context);
+  }
+
+  @Post(':id/tests')
+  @Roles(Role.ADMIN, Role.LAB_MANAGER, Role.ANALYST)
+  async addTestToSample(
+    @Param('id') id: string,
+    @Body() body: { testDefinitionId: string },
+    @Req() req: Request,
+  ) {
+    const user = (req as any).user;
+    const context = {
+      actorId: user.userId,
+      actorEmail: user.email,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    };
+    return this.samplesService.addTestToSample(id, body.testDefinitionId, context);
+  }
+
+  @Get(':id/attachments')
+  @Roles(Role.ADMIN, Role.LAB_MANAGER, Role.ANALYST, Role.SALES_ACCOUNTING)
+  async getSampleAttachments(@Param('id') id: string) {
+    return this.samplesService.getSampleAttachments(id);
   }
 }

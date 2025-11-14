@@ -551,4 +551,57 @@ export class TestAssignmentsService {
 
     return false; // In specification
   }
+
+  /**
+   * Add attachment to a test assignment
+   */
+  async addAttachment(
+    testAssignmentId: string,
+    body: {
+      fileName: string;
+      fileUrl: string;
+      fileSize?: number;
+      mimeType: string;
+    },
+    context: AuditContext,
+  ) {
+    // Verify test assignment exists
+    const testAssignment = await this.prisma.testAssignment.findUnique({
+      where: { id: testAssignmentId },
+    });
+    if (!testAssignment) {
+      throw new NotFoundException(
+        `TestAssignment with ID '${testAssignmentId}' not found`,
+      );
+    }
+
+    // Create attachment
+    const attachment = await this.prisma.attachment.create({
+      data: {
+        testAssignmentId,
+        sampleId: testAssignment.sampleId,
+        fileName: body.fileName,
+        fileUrl: body.fileUrl,
+        fileSize: body.fileSize || 0,
+        mimeType: body.mimeType,
+        createdById: context.actorId,
+        updatedById: context.actorId,
+      },
+      include: {
+        createdBy: {
+          select: { id: true, email: true, name: true },
+        },
+      },
+    });
+
+    // Log audit entry
+    await this.auditService.logCreate(
+      context,
+      'Attachment',
+      attachment.id,
+      attachment,
+    );
+
+    return attachment;
+  }
 }

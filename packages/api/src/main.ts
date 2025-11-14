@@ -32,10 +32,19 @@ async function bootstrap() {
     .setVersion('1.0')
     .addBearerAuth()
     .addTag('auth', 'Authentication endpoints')
+    .addTag('users', 'User management')
+    .addTag('roles', 'Role management')
+    .addTag('clients', 'Client master data')
+    .addTag('methods', 'Method master data')
+    .addTag('specifications', 'Specification master data')
+    .addTag('sections', 'Section master data')
+    .addTag('test-definitions', 'Test definition master data')
+    .addTag('test-packs', 'Test pack master data')
+    .addTag('jobs', 'Job management')
     .addTag('samples', 'Sample management')
     .addTag('tests', 'Test management')
     .addTag('reports', 'Report management')
-    .addTag('files', 'File management')
+    .addTag('audit', 'Audit log')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
