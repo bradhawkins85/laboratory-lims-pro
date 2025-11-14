@@ -9,7 +9,7 @@ import {
 
 /**
  * Permission Matrix for Laboratory LIMS Pro
- * 
+ *
  * Roles:
  * - ADMIN: Full access to everything
  * - LAB_MANAGER: QA/Reviewer - approve/release results & COAs, view all, edit Samples/Tests, manage templates
@@ -22,30 +22,133 @@ import {
 const PERMISSION_MATRIX: Record<Role, Partial<Record<Resource, Action[]>>> = {
   [Role.ADMIN]: {
     // Admin has full access to everything
-    [Resource.SAMPLE]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE],
-    [Resource.TEST]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE, Action.ASSIGN, Action.UNASSIGN, Action.EDIT_RESULTS, Action.APPROVE, Action.RELEASE],
-    [Resource.REPORT]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE, Action.GENERATE_DRAFT, Action.FINALIZE, Action.RELEASE, Action.VIEW_VERSIONS],
+    [Resource.SAMPLE]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+    ],
+    [Resource.TEST]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+      Action.ASSIGN,
+      Action.UNASSIGN,
+      Action.EDIT_RESULTS,
+      Action.APPROVE,
+      Action.RELEASE,
+    ],
+    [Resource.REPORT]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+      Action.GENERATE_DRAFT,
+      Action.FINALIZE,
+      Action.RELEASE,
+      Action.VIEW_VERSIONS,
+    ],
     [Resource.AUDIT_LOG]: [Action.READ],
     [Resource.SETTINGS]: [Action.READ, Action.UPDATE, Action.MANAGE],
-    [Resource.TEMPLATE]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE, Action.MANAGE],
-    [Resource.TEST_PACK]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE, Action.MANAGE],
-    [Resource.USER]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE, Action.MANAGE],
-    [Resource.ROLE]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE, Action.MANAGE],
-    [Resource.ATTACHMENT]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE],
-    [Resource.ACCOUNTING]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE],
-    [Resource.QUOTE]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE],
-    [Resource.PURCHASE_ORDER]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE],
-    [Resource.SALES_ORDER]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE],
-    [Resource.INVOICE]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE],
+    [Resource.TEMPLATE]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+      Action.MANAGE,
+    ],
+    [Resource.TEST_PACK]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+      Action.MANAGE,
+    ],
+    [Resource.USER]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+      Action.MANAGE,
+    ],
+    [Resource.ROLE]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+      Action.MANAGE,
+    ],
+    [Resource.ATTACHMENT]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+    ],
+    [Resource.ACCOUNTING]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+    ],
+    [Resource.QUOTE]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+    ],
+    [Resource.PURCHASE_ORDER]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+    ],
+    [Resource.SALES_ORDER]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+    ],
+    [Resource.INVOICE]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+    ],
   },
   [Role.LAB_MANAGER]: {
     [Resource.SAMPLE]: [Action.CREATE, Action.READ, Action.UPDATE],
-    [Resource.TEST]: [Action.READ, Action.UPDATE, Action.ASSIGN, Action.UNASSIGN, Action.EDIT_RESULTS, Action.APPROVE, Action.RELEASE],
-    [Resource.REPORT]: [Action.READ, Action.FINALIZE, Action.RELEASE, Action.VIEW_VERSIONS],
+    [Resource.TEST]: [
+      Action.READ,
+      Action.UPDATE,
+      Action.ASSIGN,
+      Action.UNASSIGN,
+      Action.EDIT_RESULTS,
+      Action.APPROVE,
+      Action.RELEASE,
+    ],
+    [Resource.REPORT]: [
+      Action.READ,
+      Action.FINALIZE,
+      Action.RELEASE,
+      Action.VIEW_VERSIONS,
+    ],
     [Resource.AUDIT_LOG]: [Action.READ],
     [Resource.SETTINGS]: [Action.READ, Action.UPDATE, Action.MANAGE],
-    [Resource.TEMPLATE]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE, Action.MANAGE],
-    [Resource.TEST_PACK]: [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE, Action.MANAGE],
+    [Resource.TEMPLATE]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+      Action.MANAGE,
+    ],
+    [Resource.TEST_PACK]: [
+      Action.CREATE,
+      Action.READ,
+      Action.UPDATE,
+      Action.DELETE,
+      Action.MANAGE,
+    ],
     [Resource.USER]: [Action.READ],
     [Resource.ATTACHMENT]: [Action.CREATE, Action.READ],
     [Resource.ACCOUNTING]: [Action.READ],
@@ -57,7 +160,11 @@ const PERMISSION_MATRIX: Record<Role, Partial<Record<Resource, Action[]>>> = {
   [Role.ANALYST]: {
     [Resource.SAMPLE]: [Action.CREATE, Action.READ, Action.UPDATE], // Only for assigned samples (context-based)
     [Resource.TEST]: [Action.READ, Action.UPDATE, Action.EDIT_RESULTS], // Only for assigned tests
-    [Resource.REPORT]: [Action.GENERATE_DRAFT, Action.READ, Action.VIEW_VERSIONS],
+    [Resource.REPORT]: [
+      Action.GENERATE_DRAFT,
+      Action.READ,
+      Action.VIEW_VERSIONS,
+    ],
     [Resource.ATTACHMENT]: [Action.CREATE, Action.READ, Action.UPDATE],
     [Resource.TEMPLATE]: [Action.READ],
     [Resource.TEST_PACK]: [Action.READ],
@@ -96,7 +203,7 @@ export function can(
 ): PermissionResult {
   // Check if user has the role-level permission
   const rolePermissions = PERMISSION_MATRIX[user.role];
-  
+
   if (!rolePermissions) {
     return {
       allowed: false,
@@ -105,7 +212,7 @@ export function can(
   }
 
   const resourcePermissions = rolePermissions[resource];
-  
+
   if (!resourcePermissions || !resourcePermissions.includes(action)) {
     return {
       allowed: false,
@@ -137,7 +244,7 @@ export function can(
           };
         }
       }
-      
+
       if (resource === Resource.REPORT) {
         // Clients can only view released reports
         if (context.status !== 'RELEASED') {
@@ -146,7 +253,7 @@ export function can(
             reason: 'Client can only view released reports',
           };
         }
-        
+
         // Must be their sample
         if (context.clientId && context.clientId !== user.id) {
           return {
@@ -163,7 +270,8 @@ export function can(
         if (context.status === 'FINALIZED' || context.status === 'RELEASED') {
           return {
             allowed: false,
-            reason: 'Cannot modify accounting fields on finalized/released items',
+            reason:
+              'Cannot modify accounting fields on finalized/released items',
           };
         }
       }
@@ -190,7 +298,7 @@ export function canAny(
       return result;
     }
   }
-  
+
   return {
     allowed: false,
     reason: `Role ${user.role} does not have any of the required permissions for ${resource}`,
@@ -212,7 +320,7 @@ export function canAll(
       return result;
     }
   }
-  
+
   return {
     allowed: true,
   };
@@ -227,13 +335,13 @@ export function getAllowedActions(
   context?: PermissionContext,
 ): Action[] {
   const rolePermissions = PERMISSION_MATRIX[user.role];
-  
+
   if (!rolePermissions) {
     return [];
   }
 
   const resourcePermissions = rolePermissions[resource];
-  
+
   if (!resourcePermissions) {
     return [];
   }

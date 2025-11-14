@@ -21,9 +21,15 @@ import {
 describe('Permissions Helper', () => {
   // Test users
   const admin: PermissionUser = { id: 'admin-1', role: Role.ADMIN };
-  const labManager: PermissionUser = { id: 'manager-1', role: Role.LAB_MANAGER };
+  const labManager: PermissionUser = {
+    id: 'manager-1',
+    role: Role.LAB_MANAGER,
+  };
   const analyst: PermissionUser = { id: 'analyst-1', role: Role.ANALYST };
-  const salesAccounting: PermissionUser = { id: 'sales-1', role: Role.SALES_ACCOUNTING };
+  const salesAccounting: PermissionUser = {
+    id: 'sales-1',
+    role: Role.SALES_ACCOUNTING,
+  };
   const client: PermissionUser = { id: 'client-1', role: Role.CLIENT };
 
   describe('can() - Basic role permissions', () => {
@@ -36,35 +42,55 @@ describe('Permissions Helper', () => {
     it('should allow LAB_MANAGER to approve and release', () => {
       expect(can(labManager, Action.APPROVE, Resource.TEST).allowed).toBe(true);
       expect(can(labManager, Action.RELEASE, Resource.TEST).allowed).toBe(true);
-      expect(can(labManager, Action.FINALIZE, Resource.REPORT).allowed).toBe(true);
+      expect(can(labManager, Action.FINALIZE, Resource.REPORT).allowed).toBe(
+        true,
+      );
     });
 
     it('should not allow LAB_MANAGER to delete samples', () => {
-      expect(can(labManager, Action.DELETE, Resource.SAMPLE).allowed).toBe(false);
+      expect(can(labManager, Action.DELETE, Resource.SAMPLE).allowed).toBe(
+        false,
+      );
     });
 
     it('should allow ANALYST to create and edit samples', () => {
       expect(can(analyst, Action.CREATE, Resource.SAMPLE).allowed).toBe(true);
       expect(can(analyst, Action.UPDATE, Resource.SAMPLE).allowed).toBe(true);
-      expect(can(analyst, Action.EDIT_RESULTS, Resource.TEST).allowed).toBe(true);
+      expect(can(analyst, Action.EDIT_RESULTS, Resource.TEST).allowed).toBe(
+        true,
+      );
     });
 
     it('should not allow ANALYST to approve or release', () => {
       expect(can(analyst, Action.APPROVE, Resource.TEST).allowed).toBe(false);
       expect(can(analyst, Action.RELEASE, Resource.TEST).allowed).toBe(false);
-      expect(can(analyst, Action.FINALIZE, Resource.REPORT).allowed).toBe(false);
+      expect(can(analyst, Action.FINALIZE, Resource.REPORT).allowed).toBe(
+        false,
+      );
     });
 
     it('should allow SALES_ACCOUNTING to manage accounting resources', () => {
-      expect(can(salesAccounting, Action.READ, Resource.SAMPLE).allowed).toBe(true);
-      expect(can(salesAccounting, Action.UPDATE, Resource.ACCOUNTING).allowed).toBe(true);
-      expect(can(salesAccounting, Action.CREATE, Resource.QUOTE).allowed).toBe(true);
-      expect(can(salesAccounting, Action.UPDATE, Resource.INVOICE).allowed).toBe(true);
+      expect(can(salesAccounting, Action.READ, Resource.SAMPLE).allowed).toBe(
+        true,
+      );
+      expect(
+        can(salesAccounting, Action.UPDATE, Resource.ACCOUNTING).allowed,
+      ).toBe(true);
+      expect(can(salesAccounting, Action.CREATE, Resource.QUOTE).allowed).toBe(
+        true,
+      );
+      expect(
+        can(salesAccounting, Action.UPDATE, Resource.INVOICE).allowed,
+      ).toBe(true);
     });
 
     it('should not allow SALES_ACCOUNTING to modify samples', () => {
-      expect(can(salesAccounting, Action.UPDATE, Resource.SAMPLE).allowed).toBe(false);
-      expect(can(salesAccounting, Action.DELETE, Resource.SAMPLE).allowed).toBe(false);
+      expect(can(salesAccounting, Action.UPDATE, Resource.SAMPLE).allowed).toBe(
+        false,
+      );
+      expect(can(salesAccounting, Action.DELETE, Resource.SAMPLE).allowed).toBe(
+        false,
+      );
     });
 
     it('should allow CLIENT to read but not modify', () => {
@@ -84,28 +110,36 @@ describe('Permissions Helper', () => {
       const context: PermissionContext = {
         assignedUserId: 'analyst-1',
       };
-      expect(can(analyst, Action.UPDATE, Resource.SAMPLE, context).allowed).toBe(true);
+      expect(
+        can(analyst, Action.UPDATE, Resource.SAMPLE, context).allowed,
+      ).toBe(true);
     });
 
     it('should not allow ANALYST to access non-assigned samples', () => {
       const context: PermissionContext = {
         assignedUserId: 'other-analyst',
       };
-      expect(can(analyst, Action.UPDATE, Resource.SAMPLE, context).allowed).toBe(false);
+      expect(
+        can(analyst, Action.UPDATE, Resource.SAMPLE, context).allowed,
+      ).toBe(false);
     });
 
     it('should allow CLIENT to access their own samples', () => {
       const context: PermissionContext = {
         clientId: 'client-1',
       };
-      expect(can(client, Action.READ, Resource.SAMPLE, context).allowed).toBe(true);
+      expect(can(client, Action.READ, Resource.SAMPLE, context).allowed).toBe(
+        true,
+      );
     });
 
     it('should not allow CLIENT to access other clients samples', () => {
       const context: PermissionContext = {
         clientId: 'other-client',
       };
-      expect(can(client, Action.READ, Resource.SAMPLE, context).allowed).toBe(false);
+      expect(can(client, Action.READ, Resource.SAMPLE, context).allowed).toBe(
+        false,
+      );
     });
 
     it('should allow CLIENT to view only released reports', () => {
@@ -113,7 +147,9 @@ describe('Permissions Helper', () => {
         clientId: 'client-1',
         status: 'RELEASED',
       };
-      expect(can(client, Action.READ, Resource.REPORT, context).allowed).toBe(true);
+      expect(can(client, Action.READ, Resource.REPORT, context).allowed).toBe(
+        true,
+      );
     });
 
     it('should not allow CLIENT to view draft reports', () => {
@@ -121,37 +157,58 @@ describe('Permissions Helper', () => {
         clientId: 'client-1',
         status: 'DRAFT',
       };
-      expect(can(client, Action.READ, Resource.REPORT, context).allowed).toBe(false);
+      expect(can(client, Action.READ, Resource.REPORT, context).allowed).toBe(
+        false,
+      );
     });
 
     it('should not allow SALES_ACCOUNTING to modify finalized accounting fields', () => {
       const context: PermissionContext = {
         status: 'FINALIZED',
       };
-      expect(can(salesAccounting, Action.UPDATE, Resource.ACCOUNTING, context).allowed).toBe(false);
+      expect(
+        can(salesAccounting, Action.UPDATE, Resource.ACCOUNTING, context)
+          .allowed,
+      ).toBe(false);
     });
   });
 
   describe('canAny()', () => {
     it('should return true if user can perform any of the actions', () => {
-      const result = canAny(analyst, [Action.CREATE, Action.DELETE], Resource.SAMPLE);
+      const result = canAny(
+        analyst,
+        [Action.CREATE, Action.DELETE],
+        Resource.SAMPLE,
+      );
       expect(result.allowed).toBe(true); // Can CREATE but not DELETE
     });
 
     it('should return false if user cannot perform any of the actions', () => {
-      const result = canAny(client, [Action.CREATE, Action.UPDATE, Action.DELETE], Resource.SAMPLE);
+      const result = canAny(
+        client,
+        [Action.CREATE, Action.UPDATE, Action.DELETE],
+        Resource.SAMPLE,
+      );
       expect(result.allowed).toBe(false);
     });
   });
 
   describe('canAll()', () => {
     it('should return true if user can perform all actions', () => {
-      const result = canAll(admin, [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE], Resource.SAMPLE);
+      const result = canAll(
+        admin,
+        [Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE],
+        Resource.SAMPLE,
+      );
       expect(result.allowed).toBe(true);
     });
 
     it('should return false if user cannot perform all actions', () => {
-      const result = canAll(analyst, [Action.CREATE, Action.READ, Action.DELETE], Resource.SAMPLE);
+      const result = canAll(
+        analyst,
+        [Action.CREATE, Action.READ, Action.DELETE],
+        Resource.SAMPLE,
+      );
       expect(result.allowed).toBe(false); // Cannot DELETE
     });
   });
@@ -223,9 +280,13 @@ describe('Permissions Helper', () => {
   describe('Audit Log permissions', () => {
     it('should allow only ADMIN and LAB_MANAGER to read audit logs', () => {
       expect(can(admin, Action.READ, Resource.AUDIT_LOG).allowed).toBe(true);
-      expect(can(labManager, Action.READ, Resource.AUDIT_LOG).allowed).toBe(true);
+      expect(can(labManager, Action.READ, Resource.AUDIT_LOG).allowed).toBe(
+        true,
+      );
       expect(can(analyst, Action.READ, Resource.AUDIT_LOG).allowed).toBe(false);
-      expect(can(salesAccounting, Action.READ, Resource.AUDIT_LOG).allowed).toBe(false);
+      expect(
+        can(salesAccounting, Action.READ, Resource.AUDIT_LOG).allowed,
+      ).toBe(false);
       expect(can(client, Action.READ, Resource.AUDIT_LOG).allowed).toBe(false);
     });
 
@@ -238,8 +299,12 @@ describe('Permissions Helper', () => {
   describe('Template and Test Pack permissions', () => {
     it('should allow ADMIN and LAB_MANAGER to manage templates', () => {
       expect(can(admin, Action.MANAGE, Resource.TEMPLATE).allowed).toBe(true);
-      expect(can(labManager, Action.MANAGE, Resource.TEMPLATE).allowed).toBe(true);
-      expect(can(analyst, Action.MANAGE, Resource.TEMPLATE).allowed).toBe(false);
+      expect(can(labManager, Action.MANAGE, Resource.TEMPLATE).allowed).toBe(
+        true,
+      );
+      expect(can(analyst, Action.MANAGE, Resource.TEMPLATE).allowed).toBe(
+        false,
+      );
     });
 
     it('should allow ANALYST to read templates', () => {

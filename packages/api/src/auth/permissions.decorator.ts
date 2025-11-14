@@ -14,11 +14,11 @@ export interface PermissionMetadata {
  * @param action - The action being performed
  * @param resource - The resource being accessed
  * @param checkContext - Whether to check record-level permissions (default: false)
- * 
+ *
  * @example
  * @RequirePermission(Action.CREATE, Resource.SAMPLE)
  * async createSample() { ... }
- * 
+ *
  * @example
  * @RequirePermission(Action.UPDATE, Resource.SAMPLE, true)
  * async updateSample(@Param('id') id: string) { ... }

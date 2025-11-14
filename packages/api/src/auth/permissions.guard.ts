@@ -19,10 +19,11 @@ export class PermissionsGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const permissionMetadata = this.reflector.getAllAndOverride<PermissionMetadata>(
-      PERMISSION_KEY,
-      [context.getHandler(), context.getClass()],
-    );
+    const permissionMetadata =
+      this.reflector.getAllAndOverride<PermissionMetadata>(PERMISSION_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]);
 
     // If no permission metadata, allow access (other guards will handle auth)
     if (!permissionMetadata) {
@@ -41,11 +42,13 @@ export class PermissionsGuard implements CanActivate {
     // If context checking is not required, just check role-level permissions
     if (!checkContext) {
       const result = can(user, action, resource);
-      
+
       if (!result.allowed) {
-        throw new ForbiddenException(result.reason || 'Insufficient permissions');
+        throw new ForbiddenException(
+          result.reason || 'Insufficient permissions',
+        );
       }
-      
+
       return true;
     }
 
@@ -72,7 +75,11 @@ export class PermissionsGuard implements CanActivate {
     request: any,
     resource: string,
   ): Promise<PermissionContext> {
-    const resourceId = request.params.id || request.params.sampleId || request.params.testId || request.params.reportId;
+    const resourceId =
+      request.params.id ||
+      request.params.sampleId ||
+      request.params.testId ||
+      request.params.reportId;
 
     if (!resourceId) {
       // No specific resource ID, return empty context
@@ -81,7 +88,7 @@ export class PermissionsGuard implements CanActivate {
 
     try {
       switch (resource) {
-        case 'SAMPLE':
+        case 'SAMPLE': {
           const sample = await this.prisma.sample.findUnique({
             where: { id: resourceId },
             select: {
@@ -103,8 +110,9 @@ export class PermissionsGuard implements CanActivate {
             clientId: sample.clientId || undefined,
             status: sample.status,
           };
+        }
 
-        case 'TEST':
+        case 'TEST': {
           const test = await this.prisma.test.findUnique({
             where: { id: resourceId },
             include: {
@@ -127,8 +135,9 @@ export class PermissionsGuard implements CanActivate {
             clientId: test.sample.clientId || undefined,
             status: test.status,
           };
+        }
 
-        case 'REPORT':
+        case 'REPORT': {
           const report = await this.prisma.report.findUnique({
             where: { id: resourceId },
             include: {
@@ -153,6 +162,7 @@ export class PermissionsGuard implements CanActivate {
             clientId: report.test.sample.clientId || undefined,
             status: report.status,
           };
+        }
 
         default:
           return {};
