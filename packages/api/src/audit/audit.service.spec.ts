@@ -192,6 +192,7 @@ describe('AuditService', () => {
         page: 1,
         perPage: 10,
         totalPages: 1,
+        grouped: false,
       });
 
       expect(mockPrismaService.auditLog.findMany).toHaveBeenCalledWith({
@@ -202,6 +203,69 @@ describe('AuditService', () => {
         orderBy: { at: 'desc' },
         skip: 0,
         take: 10,
+      });
+    });
+
+    it('should group audit logs by txId when requested', async () => {
+      const now = new Date();
+      const mockLogs = [
+        {
+          id: 'log-1',
+          action: AuditAction.CREATE,
+          table: 'Sample',
+          recordId: 'record-1',
+          changes: { field1: { old: null, new: 'value1' } },
+          reason: null,
+          txId: 'tx-123',
+          at: now,
+          actorId: 'user-1',
+          actorEmail: 'test@example.com',
+          ip: '127.0.0.1',
+          userAgent: 'jest',
+        },
+        {
+          id: 'log-2',
+          action: AuditAction.UPDATE,
+          table: 'Job',
+          recordId: 'record-2',
+          changes: { field2: { old: 'old', new: 'new' } },
+          reason: null,
+          txId: 'tx-123',
+          at: now,
+          actorId: 'user-1',
+          actorEmail: 'test@example.com',
+          ip: '127.0.0.1',
+          userAgent: 'jest',
+        },
+      ];
+
+      mockPrismaService.auditLog.findMany.mockResolvedValue(mockLogs);
+      mockPrismaService.auditLog.count.mockResolvedValue(2);
+
+      const result = await service.queryAuditLogs({
+        page: 1,
+        perPage: 10,
+        groupByTxId: true,
+      });
+
+      expect(result.grouped).toBe(true);
+      expect(result.logs).toHaveLength(1);
+      expect(result.logs[0]).toMatchObject({
+        txId: 'tx-123',
+        actorId: 'user-1',
+        actorEmail: 'test@example.com',
+        logs: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'log-1',
+            action: AuditAction.CREATE,
+            table: 'Sample',
+          }),
+          expect.objectContaining({
+            id: 'log-2',
+            action: AuditAction.UPDATE,
+            table: 'Job',
+          }),
+        ]),
       });
     });
   });

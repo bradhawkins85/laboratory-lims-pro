@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuditAction } from '@prisma/client';
+import { AuditAction, AuditLog, Prisma } from '@prisma/client';
 
 export interface AuditContext {
   actorId: string;
@@ -8,6 +8,19 @@ export interface AuditContext {
   ip?: string;
   userAgent?: string;
   txId?: string;
+}
+
+interface AuditLogFilters {
+  table?: string;
+  recordId?: string;
+  actorId?: string;
+  action?: AuditAction;
+  fromDate?: Date;
+  toDate?: Date;
+  txId?: string;
+  page?: number;
+  perPage?: number;
+  groupByTxId?: boolean;
 }
 
 @Injectable()
@@ -107,18 +120,8 @@ export class AuditService {
   /**
    * Query audit logs with filters
    */
-  async queryAuditLogs(filters: {
-    table?: string;
-    recordId?: string;
-    actorId?: string;
-    action?: AuditAction;
-    fromDate?: Date;
-    toDate?: Date;
-    txId?: string;
-    page?: number;
-    perPage?: number;
-  }) {
-    const where: any = {};
+  async queryAuditLogs(filters: AuditLogFilters) {
+    const where: Prisma.AuditLogWhereInput = {};
 
     if (filters.table) where.table = filters.table;
     if (filters.recordId) where.recordId = filters.recordId;
@@ -146,12 +149,26 @@ export class AuditService {
       this.prisma.auditLog.count({ where }),
     ]);
 
+    // Group by txId if requested
+    if (filters.groupByTxId) {
+      const grouped = this.groupLogsByTxId(logs);
+      return {
+        logs: grouped,
+        total,
+        page,
+        perPage,
+        totalPages: Math.ceil(total / perPage),
+        grouped: true,
+      };
+    }
+
     return {
       logs,
       total,
       page,
       perPage,
       totalPages: Math.ceil(total / perPage),
+      grouped: false,
     };
   }
 
@@ -300,5 +317,64 @@ export class AuditService {
     }
 
     return value;
+  }
+
+  /**
+   * Group audit logs by transaction ID
+   * Groups related changes that happened in the same transaction
+   */
+  private groupLogsByTxId(logs: AuditLog[]) {
+    const grouped = new Map<
+      string,
+      {
+        txId: string;
+        timestamp: Date;
+        actorId: string;
+        actorEmail: string;
+        ip: string | null;
+        userAgent: string | null;
+        logs: Array<{
+          id: string;
+          action: AuditAction;
+          table: string;
+          recordId: string;
+          changes: unknown;
+          reason: string | null;
+        }>;
+      }
+    >();
+
+    for (const log of logs) {
+      const txId = log.txId || log.id; // Fall back to log id if no txId
+
+      if (!grouped.has(txId)) {
+        grouped.set(txId, {
+          txId,
+          timestamp: log.at,
+          actorId: log.actorId,
+          actorEmail: log.actorEmail,
+          ip: log.ip,
+          userAgent: log.userAgent,
+          logs: [],
+        });
+      }
+
+      const group = grouped.get(txId);
+      if (group) {
+        group.logs.push({
+          id: log.id,
+          action: log.action,
+          table: log.table,
+          recordId: log.recordId,
+          changes: log.changes,
+          reason: log.reason,
+        });
+      }
+    }
+
+    // Convert map to array and sort by timestamp
+    return Array.from(grouped.values()).sort(
+      (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+    );
   }
 }

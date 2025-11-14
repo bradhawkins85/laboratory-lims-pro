@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards, Param } from '@nestjs/common';
+import { Controller, Get, Query, Param } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -34,6 +34,7 @@ export class AuditController {
     @Query('txId') txId?: string,
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
+    @Query('groupByTxId') groupByTxId?: string,
   ) {
     return this.auditService.queryAuditLogs({
       table,
@@ -45,6 +46,7 @@ export class AuditController {
       txId,
       page: page ? parseInt(page, 10) : undefined,
       perPage: perPage ? parseInt(perPage, 10) : undefined,
+      groupByTxId: groupByTxId === 'true',
     });
   }
 
