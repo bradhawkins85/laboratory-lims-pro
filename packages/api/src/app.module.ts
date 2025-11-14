@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
+import { PermissionsGuard } from './auth/permissions.guard';
 import { loggerConfig } from './config/logger.config';
 
 @Module({
@@ -28,6 +29,10 @@ import { loggerConfig } from './config/logger.config';
     {
       provide: APP_GUARD,
       useClass: RolesGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PermissionsGuard,
     },
   ],
 })

@@ -20,7 +20,7 @@ async function main() {
   });
   console.log('✅ Admin user created:', admin.email);
 
-  // Create manager user
+  // Create lab manager user
   const managerPassword = await bcrypt.hash('manager123', 10);
   const manager = await prisma.user.upsert({
     where: { email: 'manager@lims.local' },
@@ -29,35 +29,71 @@ async function main() {
       email: 'manager@lims.local',
       password: managerPassword,
       name: 'Lab Manager',
-      role: Role.MANAGER,
+      role: Role.LAB_MANAGER,
     },
   });
-  console.log('✅ Manager user created:', manager.email);
+  console.log('✅ Lab Manager user created:', manager.email);
 
-  // Create technician user
-  const techPassword = await bcrypt.hash('tech123', 10);
-  const technician = await prisma.user.upsert({
-    where: { email: 'tech@lims.local' },
+  // Create analyst user
+  const analystPassword = await bcrypt.hash('analyst123', 10);
+  const analyst = await prisma.user.upsert({
+    where: { email: 'analyst@lims.local' },
     update: {},
     create: {
-      email: 'tech@lims.local',
-      password: techPassword,
-      name: 'Lab Technician',
-      role: Role.TECHNICIAN,
+      email: 'analyst@lims.local',
+      password: analystPassword,
+      name: 'Lab Analyst',
+      role: Role.ANALYST,
     },
   });
-  console.log('✅ Technician user created:', technician.email);
+  console.log('✅ Analyst user created:', analyst.email);
 
-  // Create sample data
+  // Create sales/accounting user
+  const salesPassword = await bcrypt.hash('sales123', 10);
+  const sales = await prisma.user.upsert({
+    where: { email: 'sales@lims.local' },
+    update: {},
+    create: {
+      email: 'sales@lims.local',
+      password: salesPassword,
+      name: 'Sales Representative',
+      role: Role.SALES_ACCOUNTING,
+    },
+  });
+  console.log('✅ Sales/Accounting user created:', sales.email);
+
+  // Create client user
+  const clientPassword = await bcrypt.hash('client123', 10);
+  const client = await prisma.user.upsert({
+    where: { email: 'client@lims.local' },
+    update: {},
+    create: {
+      email: 'client@lims.local',
+      password: clientPassword,
+      name: 'Client Portal User',
+      role: Role.CLIENT,
+    },
+  });
+  console.log('✅ Client user created:', client.email);
+
+  // Create sample data assigned to analyst and owned by client
   const sample1 = await prisma.sample.create({
     data: {
       sampleId: 'SAMPLE-001',
       type: 'Blood',
-      userId: technician.id,
+      userId: admin.id,
+      assignedUserId: analyst.id,
+      clientId: client.id,
       metadata: {
         patientId: 'PAT-12345',
         collectionDate: new Date().toISOString(),
         priority: 'normal',
+        accountingFields: {
+          poNumber: 'PO-2025-001',
+          soNumber: 'SO-2025-001',
+          quoteNumber: 'Q-2025-001',
+          invoiceFlag: false,
+        },
       },
     },
   });
@@ -68,7 +104,7 @@ async function main() {
     data: {
       testName: 'Complete Blood Count',
       sampleId: sample1.id,
-      userId: technician.id,
+      userId: analyst.id,
       metadata: {
         testCode: 'CBC-001',
         parameters: ['WBC', 'RBC', 'Platelets'],
@@ -78,6 +114,12 @@ async function main() {
   console.log('✅ Test created:', test1.testName);
 
   console.log('🎉 Database seeding completed!');
+  console.log('\n📋 Test Users:');
+  console.log('  - Admin: admin@lims.local / admin123');
+  console.log('  - Lab Manager: manager@lims.local / manager123');
+  console.log('  - Analyst: analyst@lims.local / analyst123');
+  console.log('  - Sales/Accounting: sales@lims.local / sales123');
+  console.log('  - Client: client@lims.local / client123');
 }
 
 main()

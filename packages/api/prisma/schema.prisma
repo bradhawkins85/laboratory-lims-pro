@@ -16,22 +16,25 @@ model User {
   email     String   @unique
   password  String
   name      String?
-  role      Role     @default(USER)
+  role      Role     @default(CLIENT)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
   // Relations
-  samples   Sample[]
-  tests     Test[]
-  reports   Report[]
+  samples         Sample[]        @relation("SampleCreator")
+  assignedSamples Sample[]        @relation("AssignedAnalyst")
+  tests           Test[]
+  reports         Report[]
+  clientSamples   Sample[]        @relation("ClientSamples")
 }
 
-// Role enum for RBAC
+// Role enum for RBAC - 5 system roles
 enum Role {
-  ADMIN
-  MANAGER
-  TECHNICIAN
-  USER
+  ADMIN             // Full access, manage users/roles, system settings
+  LAB_MANAGER       // QA/Reviewer - approve/release results & COAs, view all, edit Samples/Tests, manage templates
+  ANALYST           // Create/edit Samples & assigned Tests, enter results, upload attachments, request re-tests
+  SALES_ACCOUNTING  // Read Samples, read accounting fields, create/update quotes/PO/SO, set invoice flags
+  CLIENT            // Portal view of their Samples, results, and final COAs only (read-only)
 }
 
 // Sample model
@@ -40,18 +43,29 @@ model Sample {
   sampleId    String   @unique
   type        String
   status      SampleStatus @default(RECEIVED)
-  metadata    Json?    // JSONB for flexible metadata
+  metadata    Json?    // JSONB for flexible metadata (including accounting fields, quotes, PO, SO, invoice flags)
   snapshot    Json?    // JSONB for audit snapshots
   receivedAt  DateTime @default(now())
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
   // Relations
-  userId      String   @db.Uuid
-  user        User     @relation(fields: [userId], references: [id])
-  tests       Test[]
+  userId         String   @db.Uuid
+  user           User     @relation("SampleCreator", fields: [userId], references: [id])
+  
+  // Assigned analyst for this sample
+  assignedUserId String?  @db.Uuid
+  assignedUser   User?    @relation("AssignedAnalyst", fields: [assignedUserId], references: [id])
+  
+  // Client who owns this sample (for portal access)
+  clientId       String?  @db.Uuid
+  client         User?    @relation("ClientSamples", fields: [clientId], references: [id])
+  
+  tests          Test[]
   
   @@index([userId])
+  @@index([assignedUserId])
+  @@index([clientId])
   @@index([status])
 }
 
@@ -91,17 +105,23 @@ enum TestStatus {
   IN_PROGRESS
   COMPLETED
   FAILED
+  APPROVED      // Approved by Lab Manager
+  RELEASED      // Released by Lab Manager
 }
 
-// Report model
+// Report (COA) model
 model Report {
-  id          String   @id @default(uuid()) @db.Uuid
+  id          String       @id @default(uuid()) @db.Uuid
   title       String
   pdfUrl      String?
-  metadata    Json?    // JSONB for report metadata
-  snapshot    Json?    // JSONB for audit snapshots
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status      ReportStatus @default(DRAFT)
+  version     Int          @default(1)
+  metadata    Json?        // JSONB for report metadata
+  snapshot    Json?        // JSONB for audit snapshots
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  finalizedAt DateTime?    // When finalized by Lab Manager
+  releasedAt  DateTime?    // When released by Lab Manager
   
   // Relations
   testId      String   @db.Uuid
@@ -111,6 +131,13 @@ model Report {
   
   @@index([testId])
   @@index([userId])
+  @@index([status])
+}
+
+enum ReportStatus {
+  DRAFT         // Created by Analyst
+  FINALIZED     // Finalized by Lab Manager
+  RELEASED      // Released by Lab Manager - visible to clients
 }
 
 // File attachment model
@@ -125,4 +152,25 @@ model Attachment {
   updatedAt   DateTime @updatedAt
   
   @@index([fileName])
+}
+
+// Audit Log model - read-only for tracking all system actions
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  action      String   // Action performed (CREATE, UPDATE, DELETE, APPROVE, RELEASE, etc.)
+  resource    String   // Resource type (SAMPLE, TEST, REPORT, USER, etc.)
+  resourceId  String?  @db.Uuid // ID of the affected resource
+  userId      String   @db.Uuid // User who performed the action
+  userName    String   // Snapshot of user name at time of action
+  userRole    String   // Snapshot of user role at time of action
+  changes     Json?    // JSONB snapshot of what changed
+  metadata    Json?    // Additional context
+  ipAddress   String?  // IP address of request
+  userAgent   String?  // User agent of request
+  createdAt   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([resource])
+  @@index([resourceId])
+  @@index([createdAt])
 }
