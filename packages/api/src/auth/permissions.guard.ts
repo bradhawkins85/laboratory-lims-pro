@@ -93,10 +93,9 @@ export class PermissionsGuard implements CanActivate {
             where: { id: resourceId },
             select: {
               id: true,
-              userId: true,
-              assignedUserId: true,
+              createdById: true,
               clientId: true,
-              status: true,
+              released: true,
             },
           });
 
@@ -105,49 +104,44 @@ export class PermissionsGuard implements CanActivate {
           }
 
           return {
-            ownerId: sample.userId,
-            assignedUserId: sample.assignedUserId || undefined,
+            ownerId: sample.createdById,
+            assignedUserId: undefined, // No longer tracking assigned user at sample level
             clientId: sample.clientId || undefined,
-            status: sample.status,
+            status: sample.released ? 'COMPLETED' : 'IN_PROGRESS',
           };
         }
 
         case 'TEST': {
-          const test = await this.prisma.test.findUnique({
+          const testAssignment = await this.prisma.testAssignment.findUnique({
             where: { id: resourceId },
             include: {
               sample: {
                 select: {
-                  assignedUserId: true,
                   clientId: true,
                 },
               },
             },
           });
 
-          if (!test) {
+          if (!testAssignment) {
             throw new NotFoundException('Test not found');
           }
 
           return {
-            ownerId: test.userId,
-            assignedUserId: test.sample.assignedUserId || undefined,
-            clientId: test.sample.clientId || undefined,
-            status: test.status,
+            ownerId: testAssignment.createdById,
+            assignedUserId: testAssignment.analystId || undefined,
+            clientId: testAssignment.sample.clientId || undefined,
+            status: testAssignment.status,
           };
         }
 
         case 'REPORT': {
-          const report = await this.prisma.report.findUnique({
+          const report = await this.prisma.cOAReport.findUnique({
             where: { id: resourceId },
             include: {
-              test: {
-                include: {
-                  sample: {
-                    select: {
-                      clientId: true,
-                    },
-                  },
+              sample: {
+                select: {
+                  clientId: true,
                 },
               },
             },
@@ -158,8 +152,8 @@ export class PermissionsGuard implements CanActivate {
           }
 
           return {
-            ownerId: report.userId,
-            clientId: report.test.sample.clientId || undefined,
+            ownerId: report.createdById,
+            clientId: report.sample.clientId || undefined,
             status: report.status,
           };
         }
