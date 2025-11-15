@@ -169,8 +169,12 @@ describe('COAReportsService - Versioning', () => {
     it('should create version 1 for a new sample', async () => {
       mockPrismaService.sample.findUnique.mockResolvedValue(mockSample);
       mockPrismaService.cOAReport.findFirst.mockResolvedValue(null);
-      mockPdfService.generatePdfFromHtml.mockResolvedValue(Buffer.from('pdf-content'));
-      mockStorageService.uploadFile.mockResolvedValue('coa-reports/SAMPLE-001-v1-12345.pdf');
+      mockPdfService.generatePdfFromHtml.mockResolvedValue(
+        Buffer.from('pdf-content'),
+      );
+      mockStorageService.uploadFile.mockResolvedValue(
+        'coa-reports/SAMPLE-001-v1-12345.pdf',
+      );
       mockPrismaService.cOAReport.updateMany.mockResolvedValue({ count: 0 });
       mockPrismaService.cOAReport.create.mockResolvedValue({
         id: 'coa-123',
@@ -206,8 +210,12 @@ describe('COAReportsService - Versioning', () => {
         version: 2,
         status: COAReportStatus.FINAL,
       });
-      mockPdfService.generatePdfFromHtml.mockResolvedValue(Buffer.from('pdf-content'));
-      mockStorageService.uploadFile.mockResolvedValue('coa-reports/SAMPLE-001-v3-12345.pdf');
+      mockPdfService.generatePdfFromHtml.mockResolvedValue(
+        Buffer.from('pdf-content'),
+      );
+      mockStorageService.uploadFile.mockResolvedValue(
+        'coa-reports/SAMPLE-001-v3-12345.pdf',
+      );
       mockPrismaService.cOAReport.updateMany.mockResolvedValue({ count: 1 });
       mockPrismaService.cOAReport.create.mockResolvedValue({
         id: 'coa-new',
@@ -243,8 +251,12 @@ describe('COAReportsService - Versioning', () => {
         version: 1,
         status: COAReportStatus.FINAL,
       });
-      mockPdfService.generatePdfFromHtml.mockResolvedValue(Buffer.from('pdf-content'));
-      mockStorageService.uploadFile.mockResolvedValue('coa-reports/SAMPLE-001-v2-12345.pdf');
+      mockPdfService.generatePdfFromHtml.mockResolvedValue(
+        Buffer.from('pdf-content'),
+      );
+      mockStorageService.uploadFile.mockResolvedValue(
+        'coa-reports/SAMPLE-001-v2-12345.pdf',
+      );
       mockPrismaService.cOAReport.updateMany.mockResolvedValue({ count: 1 });
       mockPrismaService.cOAReport.create.mockResolvedValue({
         id: 'coa-new',
@@ -271,9 +283,9 @@ describe('COAReportsService - Versioning', () => {
     it('should throw NotFoundException if sample not found', async () => {
       mockPrismaService.sample.findUnique.mockResolvedValue(null);
 
-      await expect(service.exportCOA('non-existent', mockContext)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.exportCOA('non-existent', mockContext),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -290,8 +302,12 @@ describe('COAReportsService - Versioning', () => {
       };
 
       mockPrismaService.cOAReport.findUnique.mockResolvedValue(draftReport);
-      mockPdfService.generatePdfFromHtml.mockResolvedValue(Buffer.from('pdf-content'));
-      mockStorageService.uploadFile.mockResolvedValue('coa-reports/SAMPLE-001-v1-12345.pdf');
+      mockPdfService.generatePdfFromHtml.mockResolvedValue(
+        Buffer.from('pdf-content'),
+      );
+      mockStorageService.uploadFile.mockResolvedValue(
+        'coa-reports/SAMPLE-001-v1-12345.pdf',
+      );
       mockPrismaService.cOAReport.updateMany.mockResolvedValue({ count: 0 });
       mockPrismaService.cOAReport.update.mockResolvedValue({
         ...draftReport,
@@ -307,7 +323,9 @@ describe('COAReportsService - Versioning', () => {
       const result = await service.finalizeCOA('coa-draft', mockContext);
 
       expect(result.status).toBe(COAReportStatus.FINAL);
-      expect(mockPdfService.generatePdfFromHtml).toHaveBeenCalledWith(draftReport.htmlSnapshot);
+      expect(mockPdfService.generatePdfFromHtml).toHaveBeenCalledWith(
+        draftReport.htmlSnapshot,
+      );
       expect(mockStorageService.uploadFile).toHaveBeenCalled();
       expect(mockAuditService.logUpdate).toHaveBeenCalled();
     });
@@ -319,17 +337,17 @@ describe('COAReportsService - Versioning', () => {
         sample: {},
       });
 
-      await expect(service.finalizeCOA('coa-final', mockContext)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.finalizeCOA('coa-final', mockContext),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw NotFoundException if report not found', async () => {
       mockPrismaService.cOAReport.findUnique.mockResolvedValue(null);
 
-      await expect(service.finalizeCOA('non-existent', mockContext)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.finalizeCOA('non-existent', mockContext),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -338,10 +356,14 @@ describe('COAReportsService - Versioning', () => {
       const pdfBuffer = Buffer.from('pdf-content');
       mockStorageService.getFile.mockResolvedValue(pdfBuffer);
 
-      const result = await service.downloadCOAPdf('coa-reports/SAMPLE-001-v1.pdf');
+      const result = await service.downloadCOAPdf(
+        'coa-reports/SAMPLE-001-v1.pdf',
+      );
 
       expect(result).toEqual(pdfBuffer);
-      expect(mockStorageService.getFile).toHaveBeenCalledWith('coa-reports/SAMPLE-001-v1.pdf');
+      expect(mockStorageService.getFile).toHaveBeenCalledWith(
+        'coa-reports/SAMPLE-001-v1.pdf',
+      );
     });
   });
 });

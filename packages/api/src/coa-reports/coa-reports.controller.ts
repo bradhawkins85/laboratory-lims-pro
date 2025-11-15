@@ -68,7 +68,10 @@ export class COAReportsController {
   @Get('coa/:id')
   @Roles(Role.ADMIN, Role.LAB_MANAGER, Role.ANALYST, Role.SALES_ACCOUNTING)
   @ApiOperation({ summary: 'Get COA report metadata by ID' })
-  @ApiResponse({ status: 200, description: 'COA report metadata retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'COA report metadata retrieved successfully',
+  })
   async getCOAReportMetadata(@Param('id') id: string) {
     const report = await this.coaReportsService.getCOAReport(id);
     if (!report) {
@@ -78,7 +81,13 @@ export class COAReportsController {
   }
 
   @Get('coa/:id/download')
-  @Roles(Role.ADMIN, Role.LAB_MANAGER, Role.ANALYST, Role.SALES_ACCOUNTING, Role.CLIENT)
+  @Roles(
+    Role.ADMIN,
+    Role.LAB_MANAGER,
+    Role.ANALYST,
+    Role.SALES_ACCOUNTING,
+    Role.CLIENT,
+  )
   @ApiOperation({ summary: 'Download COA PDF by report ID' })
   @ApiResponse({ status: 200, description: 'COA PDF downloaded successfully' })
   async downloadCOAPdf(@Param('id') id: string, @Res() res: Response) {
@@ -100,9 +109,11 @@ export class COAReportsController {
 
     // Download PDF from storage and stream to response
     try {
-      const pdfBuffer = await this.coaReportsService.downloadCOAPdf(report.pdfKey);
+      const pdfBuffer = await this.coaReportsService.downloadCOAPdf(
+        report.pdfKey,
+      );
       const sampleCode = (report as any).sample?.sampleCode || report.sampleId;
-      
+
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader(
         'Content-Disposition',
@@ -110,7 +121,9 @@ export class COAReportsController {
       );
       return res.send(pdfBuffer);
     } catch (error) {
-      return res.status(500).json({ message: 'Failed to download PDF', error: error.message });
+      return res
+        .status(500)
+        .json({ message: 'Failed to download PDF', error: error.message });
     }
   }
 

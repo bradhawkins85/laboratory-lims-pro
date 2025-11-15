@@ -9,12 +9,28 @@ export class StorageService implements OnModuleInit {
   private bucketName: string;
 
   constructor(private configService: ConfigService) {
-    const endpoint = this.configService.get<string>('MINIO_ENDPOINT', 'localhost');
-    const port = parseInt(this.configService.get<string>('MINIO_PORT', '9000'), 10);
-    const accessKey = this.configService.get<string>('MINIO_ACCESS_KEY', 'minioadmin');
-    const secretKey = this.configService.get<string>('MINIO_SECRET_KEY', 'minioadmin');
-    const useSSL = this.configService.get<string>('MINIO_USE_SSL', 'false') === 'true';
-    this.bucketName = this.configService.get<string>('MINIO_BUCKET_NAME', 'lims-files');
+    const endpoint = this.configService.get<string>(
+      'MINIO_ENDPOINT',
+      'localhost',
+    );
+    const port = parseInt(
+      this.configService.get<string>('MINIO_PORT', '9000'),
+      10,
+    );
+    const accessKey = this.configService.get<string>(
+      'MINIO_ACCESS_KEY',
+      'minioadmin',
+    );
+    const secretKey = this.configService.get<string>(
+      'MINIO_SECRET_KEY',
+      'minioadmin',
+    );
+    const useSSL =
+      this.configService.get<string>('MINIO_USE_SSL', 'false') === 'true';
+    this.bucketName = this.configService.get<string>(
+      'MINIO_BUCKET_NAME',
+      'lims-files',
+    );
 
     this.minioClient = new Minio.Client({
       endPoint: endpoint,
@@ -50,7 +66,11 @@ export class StorageService implements OnModuleInit {
    * @param contentType MIME type of the file
    * @returns Object key
    */
-  async uploadFile(key: string, buffer: Buffer, contentType: string): Promise<string> {
+  async uploadFile(
+    key: string,
+    buffer: Buffer,
+    contentType: string,
+  ): Promise<string> {
     try {
       await this.minioClient.putObject(
         this.bucketName,
@@ -78,7 +98,7 @@ export class StorageService implements OnModuleInit {
     try {
       const stream = await this.minioClient.getObject(this.bucketName, key);
       const chunks: Buffer[] = [];
-      
+
       return new Promise((resolve, reject) => {
         stream.on('data', (chunk) => chunks.push(chunk));
         stream.on('end', () => resolve(Buffer.concat(chunks)));

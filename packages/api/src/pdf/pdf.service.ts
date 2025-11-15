@@ -17,8 +17,9 @@ export class PdfService {
       return this.browser;
     }
 
-    const chromeWsEndpoint = this.configService.get<string>('CHROME_WS_ENDPOINT');
-    
+    const chromeWsEndpoint =
+      this.configService.get<string>('CHROME_WS_ENDPOINT');
+
     try {
       if (chromeWsEndpoint) {
         // Connect to remote Chrome instance (e.g., Browserless)
@@ -34,7 +35,7 @@ export class PdfService {
           args: ['--no-sandbox', '--disable-setuid-sandbox'],
         });
       }
-      
+
       this.logger.log('Browser connected successfully');
       return this.browser;
     } catch (error) {
@@ -62,7 +63,7 @@ export class PdfService {
 
     try {
       page = await browser.newPage();
-      
+
       // Set content with proper encoding
       await page.setContent(html, {
         waitUntil: 'networkidle0',

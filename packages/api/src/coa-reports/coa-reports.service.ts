@@ -184,13 +184,23 @@ export class COAReportsService {
     // Generate PDF if not already present
     let pdfKey = oldReport.pdfKey;
     if (!pdfKey && oldReport.htmlSnapshot) {
-      const pdfBuffer = await this.pdfService.generatePdfFromHtml(oldReport.htmlSnapshot);
-      
-      const pdfStoragePath = this.configService.get<string>('PDF_STORAGE_PATH', 'coa-reports');
-      const sampleCode = (oldReport.sample as any)?.sampleCode || oldReport.sampleId;
+      const pdfBuffer = await this.pdfService.generatePdfFromHtml(
+        oldReport.htmlSnapshot,
+      );
+
+      const pdfStoragePath = this.configService.get<string>(
+        'PDF_STORAGE_PATH',
+        'coa-reports',
+      );
+      const sampleCode =
+        (oldReport.sample as any)?.sampleCode || oldReport.sampleId;
       pdfKey = `${pdfStoragePath}/${sampleCode}-v${oldReport.version}-${Date.now()}.pdf`;
-      
-      await this.storageService.uploadFile(pdfKey, pdfBuffer, 'application/pdf');
+
+      await this.storageService.uploadFile(
+        pdfKey,
+        pdfBuffer,
+        'application/pdf',
+      );
     }
 
     // Mark all previous FINAL reports for this sample as SUPERSEDED
@@ -694,7 +704,10 @@ export class COAReportsService {
     const pdfBuffer = await this.pdfService.generatePdfFromHtml(htmlSnapshot);
 
     // Generate storage key for PDF
-    const pdfStoragePath = this.configService.get<string>('PDF_STORAGE_PATH', 'coa-reports');
+    const pdfStoragePath = this.configService.get<string>(
+      'PDF_STORAGE_PATH',
+      'coa-reports',
+    );
     const pdfKey = `${pdfStoragePath}/${sample.sampleCode}-v${newVersion}-${Date.now()}.pdf`;
 
     // Upload PDF to storage
