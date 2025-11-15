@@ -17,6 +17,12 @@ export interface BuildCOADto {
   includeFields?: string[]; // Optional: specify which fields to include
 }
 
+export interface COATemplateSettings {
+  visibleFields?: string[];
+  labelOverrides?: Record<string, string>;
+  columnOrder?: string[];
+}
+
 export interface COADataSnapshot {
   sample: {
     jobNumber: string;
@@ -84,6 +90,7 @@ export interface COADataSnapshot {
     labName?: string;
     labLogoUrl?: string;
     disclaimerText?: string;
+    templateSettings?: COATemplateSettings;
   };
 }
 
@@ -445,6 +452,7 @@ export class COAReportsService {
         labName: labSettings?.labName || 'Laboratory LIMS Pro',
         labLogoUrl: labSettings?.labLogoUrl || undefined,
         disclaimerText: labSettings?.disclaimerText || 'This Certificate of Analysis is for the sample as received and tested. Results apply only to the sample tested.',
+        templateSettings: labSettings?.coaTemplateSettings as COATemplateSettings || undefined,
       },
     };
   }
@@ -455,6 +463,27 @@ export class COAReportsService {
    */
   private buildHTMLSnapshot(dataSnapshot: COADataSnapshot): string {
     const { sample, tests, reportMetadata } = dataSnapshot;
+    
+    // Helper function to get label with override support
+    const getLabel = (field: string, defaultLabel: string): string => {
+      return reportMetadata.templateSettings?.labelOverrides?.[field] || defaultLabel;
+    };
+    
+    // Helper function to check if field should be visible
+    const isVisible = (field: string): boolean => {
+      const visibleFields = reportMetadata.templateSettings?.visibleFields;
+      // If no visibleFields specified, all fields are visible by default
+      if (!visibleFields || visibleFields.length === 0) return true;
+      return visibleFields.includes(field);
+    };
+    
+    // Helper function to get column order
+    const getColumnOrder = (): string[] => {
+      return reportMetadata.templateSettings?.columnOrder || [
+        'section', 'test', 'method', 'specification', 'result', 'unit',
+        'testDate', 'analyst', 'checkedBy', 'checkedDate', 'oos', 'comments'
+      ];
+    };
 
     // Build client info
     const clientInfo = `
@@ -483,26 +512,81 @@ export class COAReportsService {
         ? `<div class="status-flags">${statusFlags.map((f) => `<span class="chip ${f === 'URGENT' ? 'urgent' : ''}">${f}</span>`).join(' ')}</div>`
         : '';
 
-    // Build tests table with improved column structure
+    // Build tests table with improved column structure and dynamic ordering
+    const columnOrder = getColumnOrder();
+    
+    // Map of column keys to their data accessors and headers
+    const columnDefinitions: Record<string, { header: string; getValue: (test: any) => string }> = {
+      section: { 
+        header: getLabel('section', 'Section'), 
+        getValue: (test) => test.section.name 
+      },
+      test: { 
+        header: getLabel('test', 'Test'), 
+        getValue: (test) => test.testName 
+      },
+      method: { 
+        header: getLabel('method', 'Method'), 
+        getValue: (test) => `${test.method.code}<br/><span class="method-name">${test.method.name}</span>` 
+      },
+      specification: { 
+        header: getLabel('specification', 'Specification'), 
+        getValue: (test) => test.specification 
+          ? `${test.specification.name}<br/><span class="spec-range">${test.specification.min || ''} - ${test.specification.max || ''} ${test.specification.unit || ''}</span>` 
+          : 'N/A' 
+      },
+      result: { 
+        header: getLabel('result', 'Result'), 
+        getValue: (test) => test.result || 'N/A' 
+      },
+      unit: { 
+        header: getLabel('unit', 'Unit'), 
+        getValue: (test) => test.resultUnit || test.method.unit || '' 
+      },
+      testDate: { 
+        header: getLabel('testDate', 'Test Date'), 
+        getValue: (test) => test.testDate ? new Date(test.testDate).toLocaleDateString() : 'N/A' 
+      },
+      analyst: { 
+        header: getLabel('analyst', 'Analyst'), 
+        getValue: (test) => test.analyst?.name || 'N/A' 
+      },
+      checkedBy: { 
+        header: getLabel('checkedBy', 'Checked By'), 
+        getValue: (test) => test.checker?.name || 'N/A' 
+      },
+      checkedDate: { 
+        header: getLabel('checkedDate', 'Checked Date'), 
+        getValue: (test) => test.chkDate ? new Date(test.chkDate).toLocaleDateString() : 'N/A' 
+      },
+      oos: { 
+        header: getLabel('oos', 'OOS'), 
+        getValue: (test) => `<span class="${test.oos ? 'oos-yes' : ''}">${test.oos ? 'YES' : 'No'}</span>` 
+      },
+      comments: { 
+        header: getLabel('comments', 'Comments'), 
+        getValue: (test) => test.comments || '' 
+      },
+    };
+    
+    // Generate table headers based on column order
+    const tableHeaders = columnOrder
+      .filter(col => isVisible(col) && columnDefinitions[col])
+      .map(col => `<th>${columnDefinitions[col].header}</th>`)
+      .join('');
+    
+    // Generate table rows based on column order
     const testsTableRows = tests
-      .map(
-        (test) => `
-      <tr>
-        <td>${test.section.name}</td>
-        <td>${test.testName}</td>
-        <td>${test.method.code}<br/><span class="method-name">${test.method.name}</span></td>
-        <td>${test.specification ? `${test.specification.name}<br/><span class="spec-range">${test.specification.min || ''} - ${test.specification.max || ''} ${test.specification.unit || ''}</span>` : 'N/A'}</td>
-        <td>${test.result || 'N/A'}</td>
-        <td>${test.resultUnit || test.method.unit || ''}</td>
-        <td>${test.testDate ? new Date(test.testDate).toLocaleDateString() : 'N/A'}</td>
-        <td>${test.analyst?.name || 'N/A'}</td>
-        <td>${test.checker?.name || 'N/A'}</td>
-        <td>${test.chkDate ? new Date(test.chkDate).toLocaleDateString() : 'N/A'}</td>
-        <td class="${test.oos ? 'oos-yes' : ''}">${test.oos ? 'YES' : 'No'}</td>
-        <td class="comments-cell">${test.comments || ''}</td>
-      </tr>
-    `,
-      )
+      .map(test => {
+        const cells = columnOrder
+          .filter(col => isVisible(col) && columnDefinitions[col])
+          .map(col => {
+            const cellClass = col === 'comments' ? ' class="comments-cell"' : '';
+            return `<td${cellClass}>${columnDefinitions[col].getValue(test)}</td>`;
+          })
+          .join('');
+        return `<tr>${cells}</tr>`;
+      })
       .join('');
 
     return `
@@ -724,43 +808,32 @@ export class COAReportsService {
   </div>
 
   <div class="section">
-    <h2>Sample Information</h2>
+    <h2>${getLabel('sampleInformation', 'Sample Information')}</h2>
     <div class="info-grid">
-      <div class="info-label">Job Number:</div><div>${sample.jobNumber}</div>
-      <div class="info-label">Sample Code:</div><div>${sample.sampleCode}</div>
-      <div class="info-label">Description:</div><div>${sample.sampleDescription || 'N/A'}</div>
-      <div class="info-label">UIN Code:</div><div>${sample.uinCode || 'N/A'}</div>
-      <div class="info-label">Batch:</div><div>${sample.sampleBatch || 'N/A'}</div>
-      <div class="info-label">Date Received:</div><div>${new Date(sample.dateReceived).toLocaleDateString()}</div>
-      <div class="info-label">Date Due:</div><div>${sample.dateDue ? new Date(sample.dateDue).toLocaleDateString() : 'N/A'}</div>
-      <div class="info-label">Need By Date:</div><div>${sample.needByDate ? new Date(sample.needByDate).toLocaleDateString() : 'N/A'}</div>
-      <div class="info-label">MCD Date:</div><div>${sample.mcdDate ? new Date(sample.mcdDate).toLocaleDateString() : 'N/A'}</div>
-      <div class="info-label">Release Date:</div><div>${sample.releaseDate ? new Date(sample.releaseDate).toLocaleDateString() : 'N/A'}</div>
-      <div class="info-label">RM Supplier:</div><div>${sample.rmSupplier || 'N/A'}</div>
-      <div class="info-label">Temperature on Receipt:</div><div>${sample.temperatureOnReceiptC ? sample.temperatureOnReceiptC + '°C' : 'N/A'}</div>
-      <div class="info-label">Storage Conditions:</div><div>${sample.storageConditions || 'N/A'}</div>
-      ${sample.comments ? `<div class="info-label">Comments:</div><div>${sample.comments}</div>` : ''}
+      ${isVisible('jobNumber') ? `<div class="info-label">${getLabel('jobNumber', 'Job Number')}:</div><div>${sample.jobNumber}</div>` : ''}
+      ${isVisible('sampleCode') ? `<div class="info-label">${getLabel('sampleCode', 'Sample Code')}:</div><div>${sample.sampleCode}</div>` : ''}
+      ${isVisible('sampleDescription') ? `<div class="info-label">${getLabel('sampleDescription', 'Description')}:</div><div>${sample.sampleDescription || 'N/A'}</div>` : ''}
+      ${isVisible('uinCode') ? `<div class="info-label">${getLabel('uinCode', 'UIN Code')}:</div><div>${sample.uinCode || 'N/A'}</div>` : ''}
+      ${isVisible('sampleBatch') ? `<div class="info-label">${getLabel('sampleBatch', 'Batch')}:</div><div>${sample.sampleBatch || 'N/A'}</div>` : ''}
+      ${isVisible('dateReceived') ? `<div class="info-label">${getLabel('dateReceived', 'Date Received')}:</div><div>${new Date(sample.dateReceived).toLocaleDateString()}</div>` : ''}
+      ${isVisible('dateDue') ? `<div class="info-label">${getLabel('dateDue', 'Date Due')}:</div><div>${sample.dateDue ? new Date(sample.dateDue).toLocaleDateString() : 'N/A'}</div>` : ''}
+      ${isVisible('needByDate') ? `<div class="info-label">${getLabel('needByDate', 'Need By Date')}:</div><div>${sample.needByDate ? new Date(sample.needByDate).toLocaleDateString() : 'N/A'}</div>` : ''}
+      ${isVisible('mcdDate') ? `<div class="info-label">${getLabel('mcdDate', 'MCD Date')}:</div><div>${sample.mcdDate ? new Date(sample.mcdDate).toLocaleDateString() : 'N/A'}</div>` : ''}
+      ${isVisible('releaseDate') ? `<div class="info-label">${getLabel('releaseDate', 'Release Date')}:</div><div>${sample.releaseDate ? new Date(sample.releaseDate).toLocaleDateString() : 'N/A'}</div>` : ''}
+      ${isVisible('rmSupplier') ? `<div class="info-label">${getLabel('rmSupplier', 'RM Supplier')}:</div><div>${sample.rmSupplier || 'N/A'}</div>` : ''}
+      ${isVisible('temperatureOnReceiptC') ? `<div class="info-label">${getLabel('temperatureOnReceiptC', 'Temperature on Receipt')}:</div><div>${sample.temperatureOnReceiptC ? sample.temperatureOnReceiptC + '°C' : 'N/A'}</div>` : ''}
+      ${isVisible('storageConditions') ? `<div class="info-label">${getLabel('storageConditions', 'Storage Conditions')}:</div><div>${sample.storageConditions || 'N/A'}</div>` : ''}
+      ${isVisible('comments') && sample.comments ? `<div class="info-label">${getLabel('comments', 'Comments')}:</div><div>${sample.comments}</div>` : ''}
     </div>
     ${statusFlagsHTML}
   </div>
 
   <div class="section">
-    <h2>Test Results</h2>
+    <h2>${getLabel('testResults', 'Test Results')}</h2>
     <table>
       <thead>
         <tr>
-          <th>Section</th>
-          <th>Test</th>
-          <th>Method</th>
-          <th>Specification</th>
-          <th>Result</th>
-          <th>Unit</th>
-          <th>Test Date</th>
-          <th>Analyst</th>
-          <th>Checked By</th>
-          <th>Checked Date</th>
-          <th>OOS</th>
-          <th>Comments</th>
+          ${tableHeaders}
         </tr>
       </thead>
       <tbody>
