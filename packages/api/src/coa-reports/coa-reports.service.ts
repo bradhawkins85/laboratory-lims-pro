@@ -3,8 +3,11 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService, AuditContext } from '../audit/audit.service';
+import { PdfService } from '../pdf/pdf.service';
+import { StorageService } from '../storage/storage.service';
 import { COAReport, COAReportStatus } from '@prisma/client';
 
 export interface BuildCOADto {
@@ -84,6 +87,9 @@ export class COAReportsService {
   constructor(
     private prisma: PrismaService,
     private auditService: AuditService,
+    private pdfService: PdfService,
+    private storageService: StorageService,
+    private configService: ConfigService,
   ) {}
 
   /**
@@ -158,12 +164,13 @@ export class COAReportsService {
   }
 
   /**
-   * Finalize COA (marks as FINAL, marks previous versions as SUPERSEDED)
-   * AC: Each export creates or increments a COAReport.version
+   * Finalize COA (marks as FINAL, generates PDF, stores it, marks previous versions as SUPERSEDED)
+   * AC: Each finalization generates PDF and marks previous FINAL as SUPERSEDED
    */
   async finalizeCOA(id: string, context: AuditContext): Promise<COAReport> {
     const oldReport = await this.prisma.cOAReport.findUnique({
       where: { id },
+      include: { sample: true },
     });
 
     if (!oldReport) {
@@ -172,6 +179,18 @@ export class COAReportsService {
 
     if (oldReport.status !== COAReportStatus.DRAFT) {
       throw new BadRequestException('Only DRAFT reports can be finalized');
+    }
+
+    // Generate PDF if not already present
+    let pdfKey = oldReport.pdfKey;
+    if (!pdfKey && oldReport.htmlSnapshot) {
+      const pdfBuffer = await this.pdfService.generatePdfFromHtml(oldReport.htmlSnapshot);
+      
+      const pdfStoragePath = this.configService.get<string>('PDF_STORAGE_PATH', 'coa-reports');
+      const sampleCode = (oldReport.sample as any)?.sampleCode || oldReport.sampleId;
+      pdfKey = `${pdfStoragePath}/${sampleCode}-v${oldReport.version}-${Date.now()}.pdf`;
+      
+      await this.storageService.uploadFile(pdfKey, pdfBuffer, 'application/pdf');
     }
 
     // Mark all previous FINAL reports for this sample as SUPERSEDED
@@ -191,6 +210,7 @@ export class COAReportsService {
       where: { id },
       data: {
         status: COAReportStatus.FINAL,
+        pdfKey,
         reportedAt: new Date(),
         reportedById: context.actorId,
         updatedById: context.actorId,
@@ -266,6 +286,15 @@ export class COAReportsService {
         updatedBy: { select: { id: true, email: true, name: true } },
       },
     });
+  }
+
+  /**
+   * Download COA PDF from storage
+   * @param pdfKey Storage key for the PDF file
+   * @returns PDF as Buffer
+   */
+  async downloadCOAPdf(pdfKey: string): Promise<Buffer> {
+    return this.storageService.getFile(pdfKey);
   }
 
   /**
@@ -447,12 +476,24 @@ export class COAReportsService {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Certificate of Analysis - ${sample.sampleCode}</title>
+  <title>Certificate of Analysis - ${sample.sampleCode} - Version ${reportMetadata.version}</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
-    .header { text-align: center; margin-bottom: 30px; }
-    .header h1 { margin: 0; }
-    .header .version { font-size: 0.9em; color: #666; }
+    .header { text-align: center; margin-bottom: 30px; position: relative; }
+    .header h1 { margin: 0; font-size: 1.8em; }
+    .header h2 { margin: 10px 0; font-size: 1.4em; }
+    .version-badge { 
+      position: absolute; 
+      top: 0; 
+      right: 0; 
+      background: #2563eb; 
+      color: white; 
+      padding: 8px 15px; 
+      border-radius: 5px; 
+      font-size: 1.1em; 
+      font-weight: bold;
+    }
+    .header .meta { font-size: 0.9em; color: #666; margin-top: 10px; }
     .section { margin-bottom: 20px; }
     .section h2 { font-size: 1.2em; border-bottom: 2px solid #333; padding-bottom: 5px; }
     .info-grid { display: grid; grid-template-columns: 200px 1fr; gap: 10px; }
@@ -470,9 +511,11 @@ export class COAReportsService {
 </head>
 <body>
   <div class="header">
+    <div class="version-badge">Version ${reportMetadata.version}</div>
     <h1>${reportMetadata.labName || 'Laboratory LIMS Pro'}</h1>
     <h2>Certificate of Analysis</h2>
-    <div class="version">Version ${reportMetadata.version} | Generated: ${new Date(reportMetadata.generatedAt).toLocaleString()}</div>
+    <div class="meta">Generated: ${new Date(reportMetadata.generatedAt).toLocaleString()}</div>
+  </div>
   </div>
 
   <div class="section">
@@ -604,6 +647,7 @@ export class COAReportsService {
 
   /**
    * Export COA for a sample (creates/increments version; returns PDF URL)
+   * AC: Every export creates a new version, generates PDF, stores in MinIO, and marks previous FINAL as SUPERSEDED
    */
   async exportCOA(sampleId: string, context: AuditContext) {
     const sample = await this.prisma.sample.findUnique({
@@ -617,13 +661,15 @@ export class COAReportsService {
             section: true,
             method: true,
             specification: true,
+            analyst: { select: { id: true, email: true, name: true } },
+            checker: { select: { id: true, email: true, name: true } },
           },
         },
       },
     });
 
     if (!sample) {
-      throw new Error(`Sample with ID '${sampleId}' not found`);
+      throw new NotFoundException(`Sample with ID '${sampleId}' not found`);
     }
 
     // Get the latest version number for this sample
@@ -634,22 +680,47 @@ export class COAReportsService {
 
     const newVersion = (latestReport?.version || 0) + 1;
 
-    // Build the COA
+    // Step 1: Build data snapshot from current Sample + Tests (only those included in the report)
     const dataSnapshot = this.buildDataSnapshot(
       sample as any,
       newVersion,
       context,
     );
+
+    // Step 2: Render HTML using the active template and snapshot; store htmlSnapshot
     const htmlSnapshot = this.buildHTMLSnapshot(dataSnapshot);
 
-    // Create the COA report
+    // Step 3: Convert to PDF; store files in admin defined location as per env file
+    const pdfBuffer = await this.pdfService.generatePdfFromHtml(htmlSnapshot);
+
+    // Generate storage key for PDF
+    const pdfStoragePath = this.configService.get<string>('PDF_STORAGE_PATH', 'coa-reports');
+    const pdfKey = `${pdfStoragePath}/${sample.sampleCode}-v${newVersion}-${Date.now()}.pdf`;
+
+    // Upload PDF to storage
+    await this.storageService.uploadFile(pdfKey, pdfBuffer, 'application/pdf');
+
+    // Step 5: Mark previous final as superseded if applicable
+    await this.prisma.cOAReport.updateMany({
+      where: {
+        sampleId,
+        status: COAReportStatus.FINAL,
+      },
+      data: {
+        status: COAReportStatus.SUPERSEDED,
+      },
+    });
+
+    // Step 4: Increment version for (sampleId) and persist COAReport row
     const report = await this.prisma.cOAReport.create({
       data: {
         sampleId,
         version: newVersion,
-        status: 'DRAFT',
+        status: COAReportStatus.FINAL,
         htmlSnapshot,
         dataSnapshot: dataSnapshot as any,
+        pdfKey,
+        reportedAt: new Date(),
         createdById: context.actorId,
         updatedById: context.actorId,
         reportedById: context.actorId,
@@ -662,8 +733,10 @@ export class COAReportsService {
     return {
       id: report.id,
       version: report.version,
-      pdfUrl: `/api/coa/${report.id}`,
-      message: `COA version ${newVersion} created successfully`,
+      pdfUrl: `/api/coa/${report.id}/download`,
+      pdfKey: report.pdfKey,
+      status: report.status,
+      message: `COA version ${newVersion} created and finalized successfully`,
     };
   }
 }

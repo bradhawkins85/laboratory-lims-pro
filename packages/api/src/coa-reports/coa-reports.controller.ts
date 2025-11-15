@@ -67,23 +67,51 @@ export class COAReportsController {
   // COA report endpoints
   @Get('coa/:id')
   @Roles(Role.ADMIN, Role.LAB_MANAGER, Role.ANALYST, Role.SALES_ACCOUNTING)
-  @ApiOperation({ summary: 'Download COA by report ID' })
-  @ApiResponse({ status: 200, description: 'COA retrieved successfully' })
-  async downloadCOA(@Param('id') id: string, @Res() res: Response) {
+  @ApiOperation({ summary: 'Get COA report metadata by ID' })
+  @ApiResponse({ status: 200, description: 'COA report metadata retrieved successfully' })
+  async getCOAReportMetadata(@Param('id') id: string) {
+    const report = await this.coaReportsService.getCOAReport(id);
+    if (!report) {
+      return { message: 'COA Report not found' };
+    }
+    return report;
+  }
+
+  @Get('coa/:id/download')
+  @Roles(Role.ADMIN, Role.LAB_MANAGER, Role.ANALYST, Role.SALES_ACCOUNTING, Role.CLIENT)
+  @ApiOperation({ summary: 'Download COA PDF by report ID' })
+  @ApiResponse({ status: 200, description: 'COA PDF downloaded successfully' })
+  async downloadCOAPdf(@Param('id') id: string, @Res() res: Response) {
     const report = await this.coaReportsService.getCOAReport(id);
     if (!report) {
       return res.status(404).json({ message: 'COA Report not found' });
     }
 
-    // For now, return the HTML. In production, this would generate a PDF
-    // using a library like puppeteer or wkhtmltopdf
-    const sampleCode = (report as any).sample?.sampleCode || report.sampleId;
-    res.setHeader('Content-Type', 'text/html');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="COA-${sampleCode}-v${report.version}.html"`,
-    );
-    return res.send(report.htmlSnapshot);
+    if (!report.pdfKey) {
+      // Fallback to HTML if no PDF is stored (for backward compatibility)
+      const sampleCode = (report as any).sample?.sampleCode || report.sampleId;
+      res.setHeader('Content-Type', 'text/html');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="COA-${sampleCode}-v${report.version}.html"`,
+      );
+      return res.send(report.htmlSnapshot);
+    }
+
+    // Download PDF from storage and stream to response
+    try {
+      const pdfBuffer = await this.coaReportsService.downloadCOAPdf(report.pdfKey);
+      const sampleCode = (report as any).sample?.sampleCode || report.sampleId;
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="COA-${sampleCode}-v${report.version}.pdf"`,
+      );
+      return res.send(pdfBuffer);
+    } catch (error) {
+      return res.status(500).json({ message: 'Failed to download PDF', error: error.message });
+    }
   }
 
   // Legacy endpoints for backward compatibility
