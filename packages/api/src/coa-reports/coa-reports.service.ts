@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService, AuditContext } from '../audit/audit.service';
 import { PdfService } from '../pdf/pdf.service';
 import { StorageService } from '../storage/storage.service';
+import { LabSettingsService } from '../lab-settings/lab-settings.service';
 import { COAReport, COAReportStatus } from '@prisma/client';
 
 export interface BuildCOADto {
@@ -16,16 +17,24 @@ export interface BuildCOADto {
   includeFields?: string[]; // Optional: specify which fields to include
 }
 
+export interface COATemplateSettings {
+  visibleFields?: string[];
+  labelOverrides?: Record<string, string>;
+  columnOrder?: string[];
+}
+
 export interface COADataSnapshot {
   sample: {
     jobNumber: string;
     dateReceived: Date;
     dateDue?: Date;
+    releaseDate?: Date;
     client: {
       name: string;
       contactName?: string;
       email?: string;
       phone?: string;
+      address?: string;
     };
     sampleCode: string;
     rmSupplier?: string;
@@ -79,6 +88,9 @@ export interface COADataSnapshot {
     generatedAt: Date;
     generatedBy: string;
     labName?: string;
+    labLogoUrl?: string;
+    disclaimerText?: string;
+    templateSettings?: COATemplateSettings;
   };
 }
 
@@ -90,6 +102,7 @@ export class COAReportsService {
     private pdfService: PdfService,
     private storageService: StorageService,
     private configService: ConfigService,
+    private labSettingsService: LabSettingsService,
   ) {}
 
   /**
@@ -128,7 +141,11 @@ export class COAReportsService {
     const nextVersion = latestReport ? latestReport.version + 1 : 1;
 
     // Build data snapshot
-    const dataSnapshot = this.buildDataSnapshot(sample, nextVersion, context);
+    const dataSnapshot = await this.buildDataSnapshot(
+      sample,
+      nextVersion,
+      context,
+    );
 
     // Build HTML snapshot
     const htmlSnapshot = this.buildHTMLSnapshot(dataSnapshot);
@@ -353,21 +370,27 @@ export class COAReportsService {
   /**
    * Build data snapshot from sample data
    */
-  private buildDataSnapshot(
+  private async buildDataSnapshot(
     sample: any,
     version: number,
     context: AuditContext,
-  ): COADataSnapshot {
+  ): Promise<COADataSnapshot> {
+    // Get lab settings
+    const labSettings =
+      await this.labSettingsService.getOrCreateSettings(context);
+
     return {
       sample: {
         jobNumber: sample.job.jobNumber,
         dateReceived: sample.dateReceived,
         dateDue: sample.dateDue,
+        releaseDate: sample.releaseDate,
         client: {
           name: sample.client.name,
           contactName: sample.client.contactName,
           email: sample.client.email,
           phone: sample.client.phone,
+          address: sample.client.address,
         },
         sampleCode: sample.sampleCode,
         rmSupplier: sample.rmSupplier,
@@ -431,7 +454,14 @@ export class COAReportsService {
         version,
         generatedAt: new Date(),
         generatedBy: context.actorEmail,
-        labName: 'Laboratory LIMS Pro', // TODO: Make this configurable
+        labName: labSettings?.labName || 'Laboratory LIMS Pro',
+        labLogoUrl: labSettings?.labLogoUrl || undefined,
+        disclaimerText:
+          labSettings?.disclaimerText ||
+          'This Certificate of Analysis is for the sample as received and tested. Results apply only to the sample tested.',
+        templateSettings:
+          (labSettings?.coaTemplateSettings as COATemplateSettings) ||
+          undefined,
       },
     };
   }
@@ -443,7 +473,54 @@ export class COAReportsService {
   private buildHTMLSnapshot(dataSnapshot: COADataSnapshot): string {
     const { sample, tests, reportMetadata } = dataSnapshot;
 
-    // Build status flags as tags
+    // Helper function to get label with override support
+    const getLabel = (field: string, defaultLabel: string): string => {
+      return (
+        reportMetadata.templateSettings?.labelOverrides?.[field] || defaultLabel
+      );
+    };
+
+    // Helper function to check if field should be visible
+    const isVisible = (field: string): boolean => {
+      const visibleFields = reportMetadata.templateSettings?.visibleFields;
+      // If no visibleFields specified, all fields are visible by default
+      if (!visibleFields || visibleFields.length === 0) return true;
+      return visibleFields.includes(field);
+    };
+
+    // Helper function to get column order
+    const getColumnOrder = (): string[] => {
+      return (
+        reportMetadata.templateSettings?.columnOrder || [
+          'section',
+          'test',
+          'method',
+          'specification',
+          'result',
+          'unit',
+          'testDate',
+          'analyst',
+          'checkedBy',
+          'checkedDate',
+          'oos',
+          'comments',
+        ]
+      );
+    };
+
+    // Build client info
+    const clientInfo = `
+      <div class="info-label">Client:</div>
+      <div>
+        <strong>${sample.client.name}</strong><br/>
+        ${sample.client.address ? `${sample.client.address}<br/>` : ''}
+        ${sample.client.contactName ? `Contact: ${sample.client.contactName}<br/>` : ''}
+        ${sample.client.email ? `Email: ${sample.client.email}<br/>` : ''}
+        ${sample.client.phone ? `Phone: ${sample.client.phone}` : ''}
+      </div>
+    `;
+
+    // Build status flags as chips
     const statusFlags: string[] = [];
     if (sample.statusFlags.expiredRawMaterial)
       statusFlags.push('Expired Raw Material');
@@ -455,30 +532,93 @@ export class COAReportsService {
 
     const statusFlagsHTML =
       statusFlags.length > 0
-        ? `<div class="status-flags">${statusFlags.map((f) => `<span class="flag">${f}</span>`).join(' ')}</div>`
+        ? `<div class="status-flags">${statusFlags.map((f) => `<span class="chip ${f === 'URGENT' ? 'urgent' : ''}">${f}</span>`).join(' ')}</div>`
         : '';
 
-    // Build tests table
+    // Build tests table with improved column structure and dynamic ordering
+    const columnOrder = getColumnOrder();
+
+    // Map of column keys to their data accessors and headers
+    const columnDefinitions: Record<
+      string,
+      { header: string; getValue: (test: any) => string }
+    > = {
+      section: {
+        header: getLabel('section', 'Section'),
+        getValue: (test) => test.section.name,
+      },
+      test: {
+        header: getLabel('test', 'Test'),
+        getValue: (test) => test.testName,
+      },
+      method: {
+        header: getLabel('method', 'Method'),
+        getValue: (test) =>
+          `${test.method.code}<br/><span class="method-name">${test.method.name}</span>`,
+      },
+      specification: {
+        header: getLabel('specification', 'Specification'),
+        getValue: (test) =>
+          test.specification
+            ? `${test.specification.name}<br/><span class="spec-range">${test.specification.min || ''} - ${test.specification.max || ''} ${test.specification.unit || ''}</span>`
+            : 'N/A',
+      },
+      result: {
+        header: getLabel('result', 'Result'),
+        getValue: (test) => test.result || 'N/A',
+      },
+      unit: {
+        header: getLabel('unit', 'Unit'),
+        getValue: (test) => test.resultUnit || test.method.unit || '',
+      },
+      testDate: {
+        header: getLabel('testDate', 'Test Date'),
+        getValue: (test) =>
+          test.testDate ? new Date(test.testDate).toLocaleDateString() : 'N/A',
+      },
+      analyst: {
+        header: getLabel('analyst', 'Analyst'),
+        getValue: (test) => test.analyst?.name || 'N/A',
+      },
+      checkedBy: {
+        header: getLabel('checkedBy', 'Checked By'),
+        getValue: (test) => test.checker?.name || 'N/A',
+      },
+      checkedDate: {
+        header: getLabel('checkedDate', 'Checked Date'),
+        getValue: (test) =>
+          test.chkDate ? new Date(test.chkDate).toLocaleDateString() : 'N/A',
+      },
+      oos: {
+        header: getLabel('oos', 'OOS'),
+        getValue: (test) =>
+          `<span class="${test.oos ? 'oos-yes' : ''}">${test.oos ? 'YES' : 'No'}</span>`,
+      },
+      comments: {
+        header: getLabel('comments', 'Comments'),
+        getValue: (test) => test.comments || '',
+      },
+    };
+
+    // Generate table headers based on column order
+    const tableHeaders = columnOrder
+      .filter((col) => isVisible(col) && columnDefinitions[col])
+      .map((col) => `<th>${columnDefinitions[col].header}</th>`)
+      .join('');
+
+    // Generate table rows based on column order
     const testsTableRows = tests
-      .map(
-        (test) => `
-      <tr>
-        <td>${test.section.name}</td>
-        <td>${test.method.code} - ${test.method.name}</td>
-        <td>${test.specification ? `${test.specification.code} - ${test.specification.name} (${test.specification.min || ''}-${test.specification.max || ''} ${test.specification.unit || ''})` : 'N/A'}</td>
-        <td>${test.testName}</td>
-        <td>${test.dueDate ? new Date(test.dueDate).toLocaleDateString() : 'N/A'}</td>
-        <td>${test.analyst?.name || 'N/A'}</td>
-        <td>${test.status}</td>
-        <td>${test.testDate ? new Date(test.testDate).toLocaleDateString() : 'N/A'}</td>
-        <td>${test.result || 'N/A'} ${test.resultUnit || ''}</td>
-        <td>${test.checker?.name || 'N/A'}</td>
-        <td>${test.chkDate ? new Date(test.chkDate).toLocaleDateString() : 'N/A'}</td>
-        <td>${test.oos ? 'YES' : 'No'}</td>
-        <td>${test.comments || ''}</td>
-      </tr>
-    `,
-      )
+      .map((test) => {
+        const cells = columnOrder
+          .filter((col) => isVisible(col) && columnDefinitions[col])
+          .map((col) => {
+            const cellClass =
+              col === 'comments' ? ' class="comments-cell"' : '';
+            return `<td${cellClass}>${columnDefinitions[col].getValue(test)}</td>`;
+          })
+          .join('');
+        return `<tr>${cells}</tr>`;
+      })
       .join('');
 
     return `
@@ -488,85 +628,244 @@ export class COAReportsService {
   <meta charset="UTF-8">
   <title>Certificate of Analysis - ${sample.sampleCode} - Version ${reportMetadata.version}</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    .header { text-align: center; margin-bottom: 30px; position: relative; }
-    .header h1 { margin: 0; font-size: 1.8em; }
-    .header h2 { margin: 10px 0; font-size: 1.4em; }
+    @page {
+      size: A4;
+      margin: 15mm;
+      @bottom-center {
+        content: "Page " counter(page) " of " counter(pages);
+      }
+    }
+    
+    body { 
+      font-family: Arial, sans-serif; 
+      font-size: 10pt;
+      margin: 0;
+      padding: 0;
+      line-height: 1.4;
+    }
+    
+    .header { 
+      text-align: center; 
+      margin-bottom: 20px; 
+      position: relative;
+      border-bottom: 2px solid #2563eb;
+      padding-bottom: 15px;
+    }
+    
+    .logo-container {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    
+    .logo {
+      max-width: 200px;
+      max-height: 60px;
+    }
+    
+    .header h1 { 
+      margin: 5px 0; 
+      font-size: 1.5em;
+      color: #1e40af;
+    }
+    
+    .header h2 { 
+      margin: 10px 0 5px 0; 
+      font-size: 1.3em;
+      color: #1e40af;
+    }
+    
     .version-badge { 
       position: absolute; 
       top: 0; 
       right: 0; 
       background: #2563eb; 
       color: white; 
-      padding: 8px 15px; 
-      border-radius: 5px; 
-      font-size: 1.1em; 
+      padding: 6px 12px; 
+      border-radius: 4px; 
+      font-size: 0.95em; 
       font-weight: bold;
     }
-    .header .meta { font-size: 0.9em; color: #666; margin-top: 10px; }
-    .section { margin-bottom: 20px; }
-    .section h2 { font-size: 1.2em; border-bottom: 2px solid #333; padding-bottom: 5px; }
-    .info-grid { display: grid; grid-template-columns: 200px 1fr; gap: 10px; }
-    .info-label { font-weight: bold; }
-    .status-flags { margin: 10px 0; }
-    .flag { display: inline-block; padding: 5px 10px; margin: 2px; background: #f0f0f0; border-radius: 3px; font-size: 0.9em; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 0.85em; }
-    th { background-color: #f2f2f2; font-weight: bold; }
-    .footer { margin-top: 40px; font-size: 0.9em; }
-    .signatures { display: flex; justify-content: space-between; margin-top: 40px; }
-    .signature { width: 45%; }
-    .signature-line { border-top: 1px solid #000; margin-top: 50px; padding-top: 5px; }
+    
+    .header .meta { 
+      font-size: 0.85em; 
+      color: #666; 
+      margin-top: 5px; 
+    }
+    
+    .section { 
+      margin-bottom: 15px;
+      page-break-inside: avoid;
+    }
+    
+    .section h2 { 
+      font-size: 1.1em; 
+      border-bottom: 1px solid #999; 
+      padding-bottom: 3px;
+      margin-bottom: 10px;
+      color: #1e40af;
+    }
+    
+    .info-grid { 
+      display: grid; 
+      grid-template-columns: 160px 1fr; 
+      gap: 6px 10px;
+      font-size: 0.9em;
+    }
+    
+    .info-label { 
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .status-flags { 
+      margin: 10px 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    
+    .chip { 
+      display: inline-block; 
+      padding: 4px 10px; 
+      background: #e5e7eb; 
+      border-radius: 12px; 
+      font-size: 0.85em;
+      font-weight: 500;
+      color: #374151;
+    }
+    
+    .chip.urgent {
+      background: #fee2e2;
+      color: #991b1b;
+      font-weight: bold;
+    }
+    
+    table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      margin-top: 10px;
+      font-size: 0.85em;
+    }
+    
+    th, td { 
+      border: 1px solid #d1d5db; 
+      padding: 6px 4px; 
+      text-align: left;
+      vertical-align: top;
+      word-wrap: break-word;
+    }
+    
+    th { 
+      background-color: #f3f4f6; 
+      font-weight: bold;
+      color: #1f2937;
+      font-size: 0.9em;
+    }
+    
+    .method-name, .spec-range {
+      font-size: 0.85em;
+      color: #6b7280;
+    }
+    
+    .oos-yes {
+      background-color: #fef2f2;
+      color: #991b1b;
+      font-weight: bold;
+    }
+    
+    .comments-cell {
+      max-width: 120px;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      hyphens: auto;
+    }
+    
+    .footer { 
+      margin-top: 30px;
+      font-size: 0.85em;
+      border-top: 1px solid #d1d5db;
+      padding-top: 15px;
+    }
+    
+    .signatures { 
+      display: flex; 
+      justify-content: space-between; 
+      margin: 30px 0 20px 0;
+    }
+    
+    .signature { 
+      width: 45%;
+      text-align: center;
+    }
+    
+    .signature-line { 
+      border-top: 1px solid #000; 
+      margin-top: 40px; 
+      padding-top: 5px;
+      font-weight: bold;
+    }
+    
+    .disclaimer {
+      font-size: 0.8em;
+      color: #6b7280;
+      font-style: italic;
+      margin-top: 20px;
+      padding: 10px;
+      background-color: #f9fafb;
+      border-left: 3px solid #9ca3af;
+    }
+    
+    .page-number {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 0.85em;
+      color: #6b7280;
+    }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="version-badge">Version ${reportMetadata.version}</div>
+    ${reportMetadata.labLogoUrl ? `<div class="logo-container"><img src="${reportMetadata.labLogoUrl}" alt="Lab Logo" class="logo" /></div>` : ''}
     <h1>${reportMetadata.labName || 'Laboratory LIMS Pro'}</h1>
     <h2>Certificate of Analysis</h2>
-    <div class="meta">Generated: ${new Date(reportMetadata.generatedAt).toLocaleString()}</div>
-  </div>
+    <div class="meta">Report Date: ${new Date(reportMetadata.generatedAt).toLocaleDateString()}</div>
   </div>
 
   <div class="section">
-    <h2>Sample Information</h2>
+    <h2>Client Information</h2>
     <div class="info-grid">
-      <div class="info-label">Job Number:</div><div>${sample.jobNumber}</div>
-      <div class="info-label">Sample Code:</div><div>${sample.sampleCode}</div>
-      <div class="info-label">Client:</div><div>${sample.client.name}</div>
-      <div class="info-label">Date Received:</div><div>${new Date(sample.dateReceived).toLocaleDateString()}</div>
-      <div class="info-label">Date Due:</div><div>${sample.dateDue ? new Date(sample.dateDue).toLocaleDateString() : 'N/A'}</div>
-      <div class="info-label">Need By Date:</div><div>${sample.needByDate ? new Date(sample.needByDate).toLocaleDateString() : 'N/A'}</div>
-      <div class="info-label">MCD Date:</div><div>${sample.mcdDate ? new Date(sample.mcdDate).toLocaleDateString() : 'N/A'}</div>
-      <div class="info-label">RM Supplier:</div><div>${sample.rmSupplier || 'N/A'}</div>
-      <div class="info-label">Description:</div><div>${sample.sampleDescription || 'N/A'}</div>
-      <div class="info-label">UIN Code:</div><div>${sample.uinCode || 'N/A'}</div>
-      <div class="info-label">Batch:</div><div>${sample.sampleBatch || 'N/A'}</div>
-      <div class="info-label">Temperature on Receipt:</div><div>${sample.temperatureOnReceiptC ? sample.temperatureOnReceiptC + '°C' : 'N/A'}</div>
-      <div class="info-label">Storage Conditions:</div><div>${sample.storageConditions || 'N/A'}</div>
-      <div class="info-label">Comments:</div><div>${sample.comments || 'N/A'}</div>
+      ${clientInfo}
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>${getLabel('sampleInformation', 'Sample Information')}</h2>
+    <div class="info-grid">
+      ${isVisible('jobNumber') ? `<div class="info-label">${getLabel('jobNumber', 'Job Number')}:</div><div>${sample.jobNumber}</div>` : ''}
+      ${isVisible('sampleCode') ? `<div class="info-label">${getLabel('sampleCode', 'Sample Code')}:</div><div>${sample.sampleCode}</div>` : ''}
+      ${isVisible('sampleDescription') ? `<div class="info-label">${getLabel('sampleDescription', 'Description')}:</div><div>${sample.sampleDescription || 'N/A'}</div>` : ''}
+      ${isVisible('uinCode') ? `<div class="info-label">${getLabel('uinCode', 'UIN Code')}:</div><div>${sample.uinCode || 'N/A'}</div>` : ''}
+      ${isVisible('sampleBatch') ? `<div class="info-label">${getLabel('sampleBatch', 'Batch')}:</div><div>${sample.sampleBatch || 'N/A'}</div>` : ''}
+      ${isVisible('dateReceived') ? `<div class="info-label">${getLabel('dateReceived', 'Date Received')}:</div><div>${new Date(sample.dateReceived).toLocaleDateString()}</div>` : ''}
+      ${isVisible('dateDue') ? `<div class="info-label">${getLabel('dateDue', 'Date Due')}:</div><div>${sample.dateDue ? new Date(sample.dateDue).toLocaleDateString() : 'N/A'}</div>` : ''}
+      ${isVisible('needByDate') ? `<div class="info-label">${getLabel('needByDate', 'Need By Date')}:</div><div>${sample.needByDate ? new Date(sample.needByDate).toLocaleDateString() : 'N/A'}</div>` : ''}
+      ${isVisible('mcdDate') ? `<div class="info-label">${getLabel('mcdDate', 'MCD Date')}:</div><div>${sample.mcdDate ? new Date(sample.mcdDate).toLocaleDateString() : 'N/A'}</div>` : ''}
+      ${isVisible('releaseDate') ? `<div class="info-label">${getLabel('releaseDate', 'Release Date')}:</div><div>${sample.releaseDate ? new Date(sample.releaseDate).toLocaleDateString() : 'N/A'}</div>` : ''}
+      ${isVisible('rmSupplier') ? `<div class="info-label">${getLabel('rmSupplier', 'RM Supplier')}:</div><div>${sample.rmSupplier || 'N/A'}</div>` : ''}
+      ${isVisible('temperatureOnReceiptC') ? `<div class="info-label">${getLabel('temperatureOnReceiptC', 'Temperature on Receipt')}:</div><div>${sample.temperatureOnReceiptC ? sample.temperatureOnReceiptC + '°C' : 'N/A'}</div>` : ''}
+      ${isVisible('storageConditions') ? `<div class="info-label">${getLabel('storageConditions', 'Storage Conditions')}:</div><div>${sample.storageConditions || 'N/A'}</div>` : ''}
+      ${isVisible('comments') && sample.comments ? `<div class="info-label">${getLabel('comments', 'Comments')}:</div><div>${sample.comments}</div>` : ''}
     </div>
     ${statusFlagsHTML}
   </div>
 
   <div class="section">
-    <h2>Test Results</h2>
+    <h2>${getLabel('testResults', 'Test Results')}</h2>
     <table>
       <thead>
         <tr>
-          <th>Section</th>
-          <th>Method</th>
-          <th>Specification</th>
-          <th>Test</th>
-          <th>Due</th>
-          <th>Analyst</th>
-          <th>Status</th>
-          <th>Test Date</th>
-          <th>Result</th>
-          <th>Chk By</th>
-          <th>Chk Date</th>
-          <th>OOS</th>
-          <th>Comments</th>
+          ${tableHeaders}
         </tr>
       </thead>
       <tbody>
@@ -583,14 +882,16 @@ export class COAReportsService {
     </div>
     <div class="signature">
       <div class="signature-line">Reviewed By</div>
-      <div>_____________________</div>
-      <div>Date: _____________________</div>
+      <div>&nbsp;</div>
+      <div>Date: _______________</div>
     </div>
   </div>
 
   <div class="footer">
-    <p><em>This Certificate of Analysis is for the sample as received and tested. Results apply only to the sample tested.</em></p>
-    <p>Page 1 of 1</p>
+    <div class="disclaimer">
+      ${reportMetadata.disclaimerText}
+    </div>
+    <div class="page-number">Page 1 of 1</div>
   </div>
 </body>
 </html>
@@ -621,7 +922,11 @@ export class COAReportsService {
       throw new Error(`Sample with ID '${sampleId}' not found`);
     }
 
-    const dataSnapshot = this.buildDataSnapshot(sample as any, 0, context);
+    const dataSnapshot = await this.buildDataSnapshot(
+      sample as any,
+      0,
+      context,
+    );
     const htmlSnapshot = this.buildHTMLSnapshot(dataSnapshot);
 
     const jsonSnapshot = {
@@ -691,7 +996,7 @@ export class COAReportsService {
     const newVersion = (latestReport?.version || 0) + 1;
 
     // Step 1: Build data snapshot from current Sample + Tests (only those included in the report)
-    const dataSnapshot = this.buildDataSnapshot(
+    const dataSnapshot = await this.buildDataSnapshot(
       sample as any,
       newVersion,
       context,

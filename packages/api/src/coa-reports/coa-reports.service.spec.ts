@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PdfService } from '../pdf/pdf.service';
 import { StorageService } from '../storage/storage.service';
+import { LabSettingsService } from '../lab-settings/lab-settings.service';
 import { ConfigService } from '@nestjs/config';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { COAReportStatus } from '@prisma/client';
@@ -15,6 +16,7 @@ describe('COAReportsService - Versioning', () => {
   let pdfService: PdfService;
   let storageService: StorageService;
   let configService: ConfigService;
+  let labSettingsService: any;
 
   const mockPrismaService = {
     sample: {
@@ -48,6 +50,21 @@ describe('COAReportsService - Versioning', () => {
     get: jest.fn((key: string, defaultValue?: string) => {
       if (key === 'PDF_STORAGE_PATH') return 'coa-reports';
       return defaultValue;
+    }),
+  };
+
+  const mockLabSettingsService = {
+    getOrCreateSettings: jest.fn().mockResolvedValue({
+      id: 'settings-123',
+      labName: 'Laboratory LIMS Pro',
+      labLogoUrl: null,
+      disclaimerText:
+        'This Certificate of Analysis is for the sample as received and tested. Results apply only to the sample tested.',
+      coaTemplateSettings: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      createdById: 'user-123',
+      updatedById: 'user-123',
     }),
   };
 
@@ -146,6 +163,10 @@ describe('COAReportsService - Versioning', () => {
           provide: ConfigService,
           useValue: mockConfigService,
         },
+        {
+          provide: LabSettingsService,
+          useValue: mockLabSettingsService,
+        },
       ],
     }).compile();
 
@@ -155,6 +176,7 @@ describe('COAReportsService - Versioning', () => {
     pdfService = module.get<PdfService>(PdfService);
     storageService = module.get<StorageService>(StorageService);
     configService = module.get<ConfigService>(ConfigService);
+    labSettingsService = module.get<LabSettingsService>(LabSettingsService);
   });
 
   afterEach(() => {

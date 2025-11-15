@@ -18,6 +18,7 @@ import { SpecificationsModule } from './specifications/specifications.module';
 import { SectionsModule } from './sections/sections.module';
 import { TestDefinitionsModule } from './test-definitions/test-definitions.module';
 import { TestPacksModule } from './test-packs/test-packs.module';
+import { LabSettingsModule } from './lab-settings/lab-settings.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { PermissionsGuard } from './auth/permissions.guard';
@@ -45,6 +46,7 @@ import { loggerConfig } from './config/logger.config';
     SectionsModule,
     TestDefinitionsModule,
     TestPacksModule,
+    LabSettingsModule,
   ],
   controllers: [AppController],
   providers: [

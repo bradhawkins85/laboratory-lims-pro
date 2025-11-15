@@ -53,6 +53,8 @@ model User {
   checkedTestAssignments  TestAssignment[] @relation("TestAssignmentChecker")
   reportedCOAReports      COAReport[]      @relation("COAReportReporter")
   approvedCOAReports      COAReport[]      @relation("COAReportApprover")
+  createdLabSettings      LabSettings[]    @relation("LabSettingsCreatedBy")
+  updatedLabSettings      LabSettings[]    @relation("LabSettingsUpdatedBy")
 }
 
 // Role enum for RBAC - 5 system roles
@@ -504,4 +506,27 @@ enum AuditAction {
   CREATE
   UPDATE
   DELETE
+}
+
+// ============================================================================
+// SETTINGS MODEL
+// ============================================================================
+
+// LabSettings - Global laboratory configuration (singleton)
+model LabSettings {
+  id                    String   @id @default(uuid()) @db.Uuid
+  labName               String   @default("Laboratory LIMS Pro")
+  labLogoUrl            String?  // URL or storage key for lab logo
+  disclaimerText        String?  @db.Text
+  coaTemplateSettings   Json?    // Template configuration: visible fields, label overrides, column order
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  createdById           String   @db.Uuid
+  updatedById           String   @db.Uuid
+  
+  createdBy             User     @relation("LabSettingsCreatedBy", fields: [createdById], references: [id])
+  updatedBy             User     @relation("LabSettingsUpdatedBy", fields: [updatedById], references: [id])
+  
+  @@index([createdById])
+  @@index([updatedById])
 }
