@@ -5,9 +5,10 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AuditModule } from '../audit/audit.module';
 import { PdfModule } from '../pdf/pdf.module';
 import { StorageModule } from '../storage/storage.module';
+import { LabSettingsModule } from '../lab-settings/lab-settings.module';
 
 @Module({
-  imports: [PrismaModule, AuditModule, PdfModule, StorageModule],
+  imports: [PrismaModule, AuditModule, PdfModule, StorageModule, LabSettingsModule],
   providers: [COAReportsService],
   controllers: [COAReportsController],
   exports: [COAReportsService],
