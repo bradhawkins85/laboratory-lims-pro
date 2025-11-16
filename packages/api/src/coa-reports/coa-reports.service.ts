@@ -10,6 +10,11 @@ import { PdfService } from '../pdf/pdf.service';
 import { StorageService } from '../storage/storage.service';
 import { LabSettingsService } from '../lab-settings/lab-settings.service';
 import { COAReport, COAReportStatus } from '@prisma/client';
+import {
+  renderCOATemplate,
+  COADataSnapshot,
+  COATemplateSettings,
+} from '../modules/coa/renderer';
 
 export interface BuildCOADto {
   sampleId: string;
@@ -17,81 +22,14 @@ export interface BuildCOADto {
   includeFields?: string[]; // Optional: specify which fields to include
 }
 
-export interface COATemplateSettings {
+// Re-export for backward compatibility
+export { COADataSnapshot, COATemplateSettings };
+
+// Legacy interface - kept for backward compatibility
+export interface COATemplateSettingsLegacy {
   visibleFields?: string[];
   labelOverrides?: Record<string, string>;
   columnOrder?: string[];
-}
-
-export interface COADataSnapshot {
-  sample: {
-    jobNumber: string;
-    dateReceived: Date;
-    dateDue?: Date;
-    releaseDate?: Date;
-    client: {
-      name: string;
-      contactName?: string;
-      email?: string;
-      phone?: string;
-      address?: string;
-    };
-    sampleCode: string;
-    rmSupplier?: string;
-    sampleDescription?: string;
-    uinCode?: string;
-    sampleBatch?: string;
-    temperatureOnReceiptC?: number;
-    storageConditions?: string;
-    comments?: string;
-    needByDate?: Date;
-    mcdDate?: Date;
-    statusFlags: {
-      expiredRawMaterial: boolean;
-      postIrradiatedRawMaterial: boolean;
-      stabilityStudy: boolean;
-      urgent: boolean;
-      allMicroTestsAssigned: boolean;
-      allChemistryTestsAssigned: boolean;
-      released: boolean;
-      retest: boolean;
-    };
-  };
-  tests: Array<{
-    section: { name: string };
-    method: { code: string; name: string; unit?: string };
-    specification?: {
-      code: string;
-      name: string;
-      target?: string;
-      min?: number;
-      max?: number;
-      unit?: string;
-    };
-    testName: string;
-    dueDate?: Date;
-    analyst?: { name?: string; email: string };
-    status: string;
-    testDate?: Date;
-    result?: string;
-    resultUnit?: string;
-    checker?: { name?: string; email: string };
-    chkDate?: Date;
-    oos: boolean;
-    comments?: string;
-    invoiceNote?: string;
-    precision?: string;
-    linearity?: string;
-  }>;
-  reportMetadata: {
-    version: number;
-    generatedAt: Date;
-    generatedBy: string;
-    labName?: string;
-    labLogoUrl?: string;
-    disclaimerText?: string;
-    templateSettings?: COATemplateSettings;
-  };
 }
 
 @Injectable()
@@ -471,20 +409,17 @@ export class COAReportsService {
    * AC: PDF includes all required fields in structured format
    */
   private buildHTMLSnapshot(dataSnapshot: COADataSnapshot): string {
-    const { sample, tests, reportMetadata } = dataSnapshot;
+    return renderCOATemplate(dataSnapshot);
+  }
 
-    // Helper function to get label with override support
-    const getLabel = (field: string, defaultLabel: string): string => {
-      return (
-        reportMetadata.templateSettings?.labelOverrides?.[field] || defaultLabel
-      );
-    };
-
-    // Helper function to check if field should be visible
-    const isVisible = (field: string): boolean => {
-      const visibleFields = reportMetadata.templateSettings?.visibleFields;
-      // If no visibleFields specified, all fields are visible by default
-      if (!visibleFields || visibleFields.length === 0) return true;
+  /**
+   * Preview COA for a sample (returns rendered HTML + JSON snapshot)
+   */
+  async previewCOA(sampleId: string, context: AuditContext) {
+    const sample = await this.prisma.sample.findUnique({
+      where: { id: sampleId },
+      include: {
+        client: true,
       return visibleFields.includes(field);
     };
 
